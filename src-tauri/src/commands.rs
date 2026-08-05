@@ -11,15 +11,14 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
+use which::which;
+use crate::card_store;
 
 // ── Global PID registry ───────────────────────────────────────────────────────
-// Stored in a process-lifetime static so the spawned runner thread can access
-// it without holding a reference back to Tauri's managed AppState.
 static GLOBAL_PIDS: Lazy<Arc<Mutex<HashMap<String, u32>>>> =
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 
-// ── Tool check ────────────────────────────────────────────────────────────────
-
+// ── Tool check ───────────────────────────────────────────────────────────────
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ToolInfo {
     pub name: String,
@@ -65,26 +64,7 @@ pub fn tool_check() -> Vec<ToolInfo> {
 }
 
 fn which_tool(name: &str) -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("where")
-            .arg(name)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        std::process::Command::new("which")
-            .arg(name)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
-    }
+    which(name).is_ok()
 }
 
 // ── Run / cancel commands ─────────────────────────────────────────────────────
@@ -97,7 +77,9 @@ pub fn run_command(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let shell = {
-        state.config.lock().unwrap().shell.clone()
+        // defensive against poisoned mutex
+        let guard = state.config.lock().map_err(|e| format!("config lock poisoned: {}", e))?;
+        guard.shell.clone()
     };
     let pids = Arc::clone(&GLOBAL_PIDS);
     let id_t = id.clone();
@@ -111,7 +93,7 @@ pub fn run_command(
 
 #[tauri::command]
 pub fn cancel_command(id: String) -> Result<(), String> {
-    let pids = GLOBAL_PIDS.lock().unwrap();
+    let pids = GLOBAL_PIDS.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(&pid) = pids.get(&id) {
         drop(pids); // release lock before killing
         kill_process(pid);
@@ -140,15 +122,6 @@ fn kill_process(pid: u32) {
 
 // ── Send card / loot to Discord ───────────────────────────────────────────────
 
-/// We keep a registry of raw output text per command-id so send_card can upload it.
-/// Populated by a thin wrapper around runner::run_command (see send_card_lines_store).
-static CARD_OUTPUT: Lazy<Arc<Mutex<HashMap<String, (String, Vec<crate::flags::Finding>)>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
-
-/// Called from lib.rs to wrap the runner and capture output for Discord sends.
-/// For simplicity we re-use run_command directly and accept that send_card will
-/// have whatever has accumulated. The full store happens inside the runner thread —
-/// we do the capture in runner.rs via the global CARD_OUTPUT handle.
 #[tauri::command]
 pub async fn send_card(
     id: String,
@@ -156,21 +129,15 @@ pub async fn send_card(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let (webhook_url, username) = {
-        let cfg = state.config.lock().unwrap();
+        let cfg = state.config.lock().map_err(|e| format!("config lock poisoned: {}", e))?;
         (cfg.webhook_url.clone(), cfg.username.clone())
     };
     if webhook_url.is_empty() {
         return Err("No webhook URL configured — open Settings first.".to_string());
     }
 
-    // Retrieve stored output for this command id
-    let (output_text, findings_list) = {
-        let store = CARD_OUTPUT.lock().unwrap();
-        store
-            .get(&id)
-            .cloned()
-            .unwrap_or_else(|| (String::from("(output not captured)"), vec![]))
-    };
+    // Retrieve stored output for this command id from card_store
+    let (output_text, findings_list) = card_store::get_card_output(&id);
 
     let color = color_for_findings(&findings_list);
     let desc = describe_findings(&findings_list);
@@ -183,20 +150,13 @@ pub async fn send_card(
     discord::send_file(&webhook_url, &username, &title, &desc, &filename, data, color).await
 }
 
-/// Store command output so send_card can retrieve it.
-#[allow(dead_code)]
-pub fn store_card_output(id: &str, text: String, findings: Vec<crate::flags::Finding>) {
-    let mut store = CARD_OUTPUT.lock().unwrap();
-    store.insert(id.to_string(), (text, findings));
-}
-
 #[tauri::command]
 pub async fn send_loot(
     markdown: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let (webhook_url, username) = {
-        let cfg = state.config.lock().unwrap();
+        let cfg = state.config.lock().map_err(|e| format!("config lock poisoned: {}", e))?;
         (cfg.webhook_url.clone(), cfg.username.clone())
     };
     if webhook_url.is_empty() {
@@ -222,17 +182,17 @@ pub async fn send_loot(
     .await
 }
 
-// ── Config ────────────────────────────────────────────────────────────────────
+// ── Config ───────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub fn get_config(state: State<'_, AppState>) -> Config {
-    state.config.lock().unwrap().clone()
+    state.config.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
 #[tauri::command]
 pub fn set_config(config: Config, state: State<'_, AppState>) -> Result<(), String> {
     crate::config::save(&config);
-    *state.config.lock().unwrap() = config;
+    *state.config.lock().unwrap_or_else(|e| e.into_inner()) = config;
     Ok(())
 }
 
@@ -241,7 +201,7 @@ pub async fn test_webhook(url: String, state: State<'_, AppState>) -> Result<(),
     if url.is_empty() {
         return Err("URL is empty".to_string());
     }
-    let username = state.config.lock().unwrap().username.clone();
+    let username = state.config.lock().unwrap_or_else(|e| e.into_inner()).username.clone();
     discord::send_embed(
         &url,
         &username,
@@ -252,7 +212,7 @@ pub async fn test_webhook(url: String, state: State<'_, AppState>) -> Result<(),
     .await
 }
 
-// ── URL opener ────────────────────────────────────────────────────────────────
+// ── URL opener ──────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub fn open_url(url: String, app: AppHandle) -> Result<(), String> {
@@ -261,7 +221,7 @@ pub fn open_url(url: String, app: AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-// ── Session ───────────────────────────────────────────────────────────────────
+// ── Session ───────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub fn save_session(data: String) -> Result<(), String> {
@@ -278,7 +238,7 @@ pub fn clear_session() -> Result<(), String> {
     session::clear()
 }
 
-// ── Findings ──────────────────────────────────────────────────────────────────
+// ── Findings ──────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub fn save_finding(data: String) -> Result<(), String> {
