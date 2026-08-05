@@ -1,10 +1,12 @@
 use crate::flags::{aggregate_findings, scan_line, Finding};
+use crate::card_store;
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::{AppHandle, Emitter};
+use std::collections::VecDeque;
 
 /// One line of command output (mirrors Go OutLine)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,7 +40,8 @@ struct QEvent {
 }
 
 /// Build a Child process for the given command line, using the configured shell.
-/// On Windows, CREATE_NO_WINDOW prevents a console flash.
+/// On Windows, CREATE_NO_WINDOW prevents a console flash. On Unix we set a new
+/// process group so cancel_command can kill the whole tree.
 pub fn spawn_process(cmdline: &str, shell: &str) -> std::io::Result<Child> {
     let (prog, args) = shell_invocation(shell, cmdline);
     let mut cmd = Command::new(prog);
@@ -52,6 +55,19 @@ pub fn spawn_process(cmdline: &str, shell: &str) -> std::io::Result<Child> {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    // make the child leader of a new process group on Unix so we can kill -PID
+    #[cfg(not(target_os = "windows"))]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            cmd.pre_exec(|| {
+                // setpgid(0, 0) -> put process in new process group
+                libc::setpgid(0, 0);
+                Ok(())
+            });
+        }
     }
 
     cmd.spawn()
@@ -110,7 +126,7 @@ fn shell_invocation(shell: &str, cmdline: &str) -> (String, Vec<String>) {
 
 /// Run a command and stream output lines to the frontend as Tauri events.
 /// The PID is registered in pids_map so cancel_command can kill it.
-/// Mirrors Go runCommand().
+/// Uses a bounded in-memory buffer (VecDeque) to avoid OOM on noisy commands.
 pub fn run_command(
     app: AppHandle,
     id: String,
@@ -118,6 +134,9 @@ pub fn run_command(
     shell: String,
     pids_map: Arc<Mutex<std::collections::HashMap<String, u32>>>,
 ) {
+    const MAX_CAPTURE_LINES: usize = 10_000; // hard cap for in-memory capture
+    const UPLOAD_TAIL_LINES: usize = 2000;   // lines to include in upload
+
     let start = Instant::now();
     let mut child = match spawn_process(&cmdline, &shell) {
         Ok(c) => c,
@@ -143,16 +162,15 @@ pub fn run_command(
     // Register PID
     let pid = child.id();
     {
-        let mut map = pids_map.lock().unwrap();
+        let mut map = pids_map.lock().unwrap_or_else(|e| e.into_inner());
         map.insert(id.clone(), pid);
     }
 
     let stdout = child.stdout.take().expect("stdout not captured");
     let stderr = child.stderr.take().expect("stderr not captured");
 
-    // Collect all lines (stdout + stderr) with stream tag
-    // We run them sequentially in two threads and collect into a shared vec.
-    let lines_arc: Arc<Mutex<Vec<OutLine>>> = Arc::new(Mutex::new(Vec::new()));
+    // Collect lines into a shared VecDeque with a cap
+    let lines_arc: Arc<Mutex<VecDeque<OutLine>>> = Arc::new(Mutex::new(VecDeque::new()));
 
     let lines_stdout = Arc::clone(&lines_arc);
     let app_stdout = app.clone();
@@ -170,8 +188,11 @@ pub fn run_command(
                         spans: spans.clone(),
                     };
                     {
-                        let mut v = lines_stdout.lock().unwrap();
-                        v.push(line);
+                        let mut v = lines_stdout.lock().unwrap_or_else(|e| e.into_inner());
+                        v.push_back(line);
+                        if v.len() > MAX_CAPTURE_LINES {
+                            v.pop_front();
+                        }
                     }
                     let _ = app_stdout.emit(
                         "q_event",
@@ -208,8 +229,11 @@ pub fn run_command(
                         spans: spans.clone(),
                     };
                     {
-                        let mut v = lines_stderr.lock().unwrap();
-                        v.push(line);
+                        let mut v = lines_stderr.lock().unwrap_or_else(|e| e.into_inner());
+                        v.push_back(line);
+                        if v.len() > MAX_CAPTURE_LINES {
+                            v.pop_front();
+                        }
                     }
                     let _ = app_stderr.emit(
                         "q_event",
@@ -239,13 +263,28 @@ pub fn run_command(
 
     // De-register PID
     {
-        let mut map = pids_map.lock().unwrap();
+        let mut map = pids_map.lock().unwrap_or_else(|e| e.into_inner());
         map.remove(&id);
     }
 
     // Aggregate findings from all lines
-    let all_lines = lines_arc.lock().unwrap();
-    let findings = aggregate_findings(&all_lines);
+    let all_lines_guard = lines_arc.lock().unwrap_or_else(|e| e.into_inner());
+    let all_vec: Vec<OutLine> = all_lines_guard.iter().cloned().collect();
+    let findings = aggregate_findings(&all_vec);
+
+    // Prepare truncated upload text (tail of last UPLOAD_TAIL_LINES)
+    let mut tail_lines: Vec<String> = all_vec
+        .iter()
+        .rev()
+        .take(UPLOAD_TAIL_LINES)
+        .cloned()
+        .map(|ol| ol.text)
+        .collect();
+    tail_lines.reverse();
+    let upload_text = tail_lines.join("\n");
+
+    // Store for send_card
+    card_store::store_card_output(&id, upload_text.clone(), findings.clone());
 
     let _ = app.emit(
         "q_event",
