@@ -15,13 +15,10 @@ use which::which;
 use crate::card_store;
 
 // ── Global PID registry ───────────────────────────────────────────────────────
-// Stored in a process-lifetime static so the spawned runner thread can access
-// it without holding a reference back to Tauri's managed AppState.
 static GLOBAL_PIDS: Lazy<Arc<Mutex<HashMap<String, u32>>>> =
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 
-// ── Tool check ─────────��────────────────────────────────────────────────
-
+// ── Tool check ───────────────────────────────────────────────────────────────
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ToolInfo {
     pub name: String,
