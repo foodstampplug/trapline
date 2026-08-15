@@ -54,12 +54,18 @@ fn findings_path() -> PathBuf {
     base.join("Trapline").join("findings.json")
 }
 
-fn load_all() -> Vec<HunterFinding> {
+fn load_all() -> Result<Vec<HunterFinding>, String> {
     let path = findings_path();
-    fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+    match fs::read_to_string(&path) {
+        Err(_) => Ok(Vec::new()), // not created yet
+        Ok(s) if s.trim().is_empty() => Ok(Vec::new()),
+        Ok(s) => serde_json::from_str(&s).map_err(|e| {
+            // Never silently discard the user's findings on a parse error. Back the
+            // file up and refuse, so a transient corruption can't be overwritten.
+            let _ = fs::copy(&path, path.with_extension("json.corrupt"));
+            format!("findings.json did not parse ({e}); backed up to findings.json.corrupt and refusing to overwrite")
+        }),
+    }
 }
 
 fn save_all(findings: &[HunterFinding]) -> Result<(), String> {
@@ -68,7 +74,10 @@ fn save_all(findings: &[HunterFinding]) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let data = serde_json::to_string_pretty(findings).map_err(|e| e.to_string())?;
-    fs::write(&path, data).map_err(|e| e.to_string())
+    // Atomic write (temp + rename) so a concurrent reader never sees a half-written file.
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, data).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
 
 /// Upsert a finding by ID (parsed from a JSON string)
@@ -77,7 +86,7 @@ pub fn save(data: &str) -> Result<(), String> {
         .map_err(|e| format!("invalid finding JSON: {}", e))?;
     incoming.updated_at = now_iso();
 
-    let mut all = load_all();
+    let mut all = load_all()?;
     if let Some(pos) = all.iter().position(|f| f.id == incoming.id) {
         // Preserve original created_at on update
         incoming.created_at = all[pos].created_at.clone();
@@ -93,13 +102,13 @@ pub fn save(data: &str) -> Result<(), String> {
 
 /// Return all findings as a JSON string
 pub fn load() -> Result<String, String> {
-    let all = load_all();
+    let all = load_all()?;
     serde_json::to_string(&all).map_err(|e| e.to_string())
 }
 
 /// Delete a finding by ID
 pub fn delete(id: &str) -> Result<(), String> {
-    let mut all = load_all();
+    let mut all = load_all()?;
     let before = all.len();
     all.retain(|f| f.id != id);
     if all.len() == before {
