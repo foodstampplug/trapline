@@ -122,7 +122,7 @@ pub fn cancel_command(id: String) -> Result<(), String> {
 }
 
 #[cfg(target_os = "windows")]
-fn kill_process(pid: u32) {
+pub(crate) fn kill_process(pid: u32) {
     let _ = std::process::Command::new("taskkill")
         .args(["/F", "/T", "/PID", &pid.to_string()])
         .stdout(std::process::Stdio::null())
@@ -131,7 +131,7 @@ fn kill_process(pid: u32) {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn kill_process(pid: u32) {
+pub(crate) fn kill_process(pid: u32) {
     // SIGTERM to the process group so child shells clean up
     unsafe {
         libc::kill(-(pid as i32), libc::SIGTERM);
@@ -231,8 +231,12 @@ pub fn get_config(state: State<'_, AppState>) -> Config {
 
 #[tauri::command]
 pub fn set_config(config: Config, state: State<'_, AppState>) -> Result<(), String> {
-    crate::config::save(&config);
-    *state.config.lock().unwrap() = config;
+    let merged = {
+        let cur = state.config.lock().unwrap();
+        crate::config::preserve_deck_fields(config, &cur)
+    };
+    crate::config::save(&merged);
+    *state.config.lock().unwrap() = merged;
     Ok(())
 }
 

@@ -702,6 +702,74 @@ async function sendCard(id) {
   finally { btn.disabled = false; btn.textContent = old; }
 }
 
+// ── Deck launcher ───────────────────────────────────────────────────────────
+function deckDot(state) {
+  const dot = $("#deckStatusDot");
+  const txt = $("#deckStatusText");
+  dot.classList.remove("running", "starting");
+  if (state === "running") { dot.classList.add("running"); txt.textContent = "running"; }
+  else if (state === "starting") { dot.classList.add("starting"); txt.textContent = "starting…"; }
+  else { txt.textContent = "stopped"; }
+}
+
+function renderDeck(s) {
+  const running = !!(s && s.running);
+  deckDot(running ? "running" : "stopped");
+  $("#deckStartBtn").classList.toggle("hidden", running);
+  $("#deckStopBtn").classList.toggle("hidden", !running);
+  $("#deckOpenBtn").classList.toggle("hidden", !running);
+  $("#deckRunning").classList.toggle("hidden", !running);
+  if (running) {
+    $("#deckQr").innerHTML = s.qrSvg || "";
+    const hasLan = !!s.lanUrl;
+    $("#deckLanRow").classList.toggle("hidden", !hasLan);
+    $("#deckLanUrl").textContent = s.lanUrl || "";
+    $("#deckToken").textContent = s.token || "";
+    $("#deckTunnelCmd").textContent = `cloudflared tunnel --url http://localhost:${s.port}`;
+    $("#deckOpenBtn").dataset.url = s.url || "";
+    if (!hasLan) $("#deckQr").innerHTML =
+      '<p style="color:#333;font-size:12px;padding:20px">Couldn\'t detect a LAN IP — use the tunnel command below.</p>';
+  }
+}
+
+async function openDeck() {
+  $("#deck").classList.remove("hidden");
+  try { renderDeck(await invoke("deck_status")); }
+  catch (e) { toast("Deck: " + errMsg(e), "err"); }
+}
+function closeDeck() { $("#deck").classList.add("hidden"); }
+
+async function deckStart() {
+  deckDot("starting");
+  $("#deckStartBtn").disabled = true;
+  try {
+    const s = await invoke("deck_start");
+    renderDeck(s);
+    toast("Deck is running ✓", "ok");
+  } catch (e) {
+    deckDot("stopped");
+    toast(errMsg(e), "err");
+  } finally {
+    $("#deckStartBtn").disabled = false;
+  }
+}
+
+async function deckStop() {
+  try { await invoke("deck_stop"); renderDeck({ running: false }); toast("Deck stopped", "ok"); }
+  catch (e) { toast("Deck: " + errMsg(e), "err"); }
+}
+
+async function deckSaveFolder() {
+  const path = $("#deckFolder").value.trim();
+  try { await invoke("deck_set_folder", { path }); toast("Deck folder saved ✓", "ok"); }
+  catch (e) { toast(errMsg(e), "err"); }
+}
+
+async function copyText(text, okMsg) {
+  try { await navigator.clipboard.writeText(text); toast(okMsg, "ok"); }
+  catch { toast("Copy failed", "err"); }
+}
+
 // ── settings + discord promo ───────────────────────────────────────────────────
 async function loadConfig() { try { const c = await invoke('get_config'); community = c.communityDiscord || ""; return c; } catch { return {}; } }
 async function openSettings() {
@@ -747,6 +815,19 @@ $("#lootClear").onclick = clearLoot;
 $("#discordBtn").onclick = openDiscord;
 $("#xBtn").onclick = () => invoke('open_url', { url: X_URL }).catch((e) => toast(errMsg(e), "err"));
 $("#settingsBtn").onclick = openSettings;
+$("#deckBtn").onclick = openDeck;
+$("#closeDeck").onclick = closeDeck;
+$("#closeDeckBtn").onclick = closeDeck;
+$("#deckStartBtn").onclick = deckStart;
+$("#deckStopBtn").onclick = deckStop;
+$("#deckOpenBtn").onclick = () => {
+  const url = $("#deckOpenBtn").dataset.url;
+  if (url) invoke("open_url", { url }).catch((e) => toast(errMsg(e), "err"));
+};
+$("#deckSaveFolder").onclick = deckSaveFolder;
+$("#deckCopyLan").onclick = () => copyText($("#deckLanUrl").textContent, "LAN URL copied ✓");
+$("#deckCopyToken").onclick = () => copyText($("#deckToken").textContent, "Token copied ✓");
+$("#deckCopyTunnel").onclick = () => copyText($("#deckTunnelCmd").textContent, "Tunnel command copied ✓");
 $("#saveBtn").onclick = saveSettings;
 $("#cancelBtn").onclick = closeSettings;
 $("#testBtn").onclick = testWebhook;

@@ -1,5 +1,6 @@
 mod commands;
 mod config;
+mod deck;
 mod discord;
 mod findings;
 mod flags;
@@ -40,7 +41,16 @@ pub fn run() {
             commands::save_session,
             commands::load_session,
             commands::clear_session,
+            deck::deck_start,
+            deck::deck_stop,
+            deck::deck_status,
+            deck::deck_set_folder,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Trapline");
+        .build(tauri::generate_context!())
+        .expect("error while building Trapline")
+        .run(|_app, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                let _ = deck::deck_stop();
+            }
+        });
 }

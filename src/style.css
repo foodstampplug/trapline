@@ -443,3 +443,24 @@ mark.sev-critical { outline: 1px solid currentColor; outline-offset: -1px; }
 /* mark-as-finding button on cards */
 .act-btn.mark-finding { color: var(--accent); }
 .act-btn.mark-finding:hover { background: var(--accent-dim); border-color: var(--accent); }
+
+/* ── Deck launcher ─────────────────────────────────────────── */
+.deck-dot { display:inline-block; width:8px; height:8px; border-radius:50%;
+  background:#666; margin:0 6px 0 10px; vertical-align:middle; }
+.deck-dot.running { background:#39d353; box-shadow:0 0 8px #39d353; }
+.deck-dot.starting { background:#e3b341; box-shadow:0 0 8px #e3b341; }
+.deck-controls { display:flex; gap:10px; margin:4px 0 14px; }
+.deck-running { display:flex; flex-direction:column; gap:12px; }
+.deck-qr { align-self:center; width:220px; height:220px; padding:10px;
+  background:#fff; border-radius:10px; }
+.deck-qr svg { width:100%; height:100%; display:block; }
+.deck-row { display:flex; flex-direction:column; gap:4px; }
+.deck-row > label { font-size:12px; color:var(--muted, #8a8f98); }
+.deck-copy { display:flex; gap:8px; align-items:center; }
+.deck-copy code, .deck-copy input { flex:1; padding:8px 10px; border-radius:8px;
+  background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08);
+  font-size:12px; overflow:auto; white-space:nowrap; }
+.deck-note { font-size:11px; color:var(--muted, #8a8f98); margin:2px 0 0; }
+.deck-adv { margin-top:14px; font-size:13px; }
+.deck-adv summary { cursor:pointer; color:var(--muted, #8a8f98); }
+.deck-adv .deck-copy { margin-top:8px; }

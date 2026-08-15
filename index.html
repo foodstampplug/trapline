@@ -40,6 +40,7 @@
       <button id="toolsBtn"     class="icon-btn" title="Installed tools">🧰</button>
       <button id="lootBtn"      class="icon-btn loot" title="Loot (session findings)">💰<span id="lootCount" class="count hidden">0</span></button>
       <button id="findingsBtn"  class="icon-btn findings-nav" title="Findings tracker">🐛<span id="findingsCount" class="count hidden">0</span></button>
+      <button id="deckBtn" class="icon-btn" title="Deck — run the phone remote">📡</button>
       <button id="settingsBtn"  class="icon-btn" title="Settings">⚙</button>
     </div>
   </header>
@@ -141,6 +142,53 @@
         <span class="spacer"></span>
         <button id="cancelBtn" class="ghost-btn">Close</button>
         <button id="saveBtn" class="run-btn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deck launcher modal -->
+  <div id="deck" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Deck <span class="deck-dot" id="deckStatusDot"></span><span id="deckStatusText" class="muted-count">stopped</span></h2>
+        <button id="closeDeck" class="icon-btn sm" title="Close">✕</button>
+      </div>
+      <p class="modal-sub">Run the phone remote on this machine, then scan the QR to open it on your phone — already logged in — over your Wi-Fi.</p>
+
+      <div class="deck-controls">
+        <button id="deckStartBtn" class="run-btn">Start Deck ▸</button>
+        <button id="deckStopBtn" class="ghost-btn hidden">Stop</button>
+        <button id="deckOpenBtn" class="ghost-btn hidden">Open on this PC</button>
+      </div>
+
+      <div id="deckRunning" class="deck-running hidden">
+        <div class="deck-qr" id="deckQr"></div>
+        <div id="deckLanRow" class="deck-row">
+          <label>On this Wi-Fi</label>
+          <div class="deck-copy"><code id="deckLanUrl"></code><button id="deckCopyLan" class="ghost-btn sm">Copy</button></div>
+        </div>
+        <div class="deck-row">
+          <label>Token</label>
+          <div class="deck-copy"><code id="deckToken" class="mono"></code><button id="deckCopyToken" class="ghost-btn sm">Copy</button></div>
+        </div>
+        <div class="deck-row">
+          <label>Off your network? Run a tunnel, then open the printed URL</label>
+          <div class="deck-copy"><code id="deckTunnelCmd" class="mono"></code><button id="deckCopyTunnel" class="ghost-btn sm">Copy</button></div>
+        </div>
+        <p class="deck-note">Same Wi-Fi? Just scan the QR. First phone connection may need Windows Firewall to allow <b>node.exe</b> (one-time).</p>
+      </div>
+
+      <details class="deck-adv">
+        <summary>Advanced — Deck folder</summary>
+        <div class="deck-copy">
+          <input id="deckFolder" type="text" spellcheck="false" placeholder="C:\Users\you\trapline-deck" />
+          <button id="deckSaveFolder" class="ghost-btn sm">Save</button>
+        </div>
+      </details>
+
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button id="closeDeckBtn" class="ghost-btn">Close</button>
       </div>
     </div>
   </div>
