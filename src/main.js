@@ -720,15 +720,15 @@ function renderDeck(s) {
   $("#deckOpenBtn").classList.toggle("hidden", !running);
   $("#deckRunning").classList.toggle("hidden", !running);
   if (running) {
-    $("#deckQr").innerHTML = s.qrSvg || "";
     const hasLan = !!s.lanUrl;
+    $("#deckQr").innerHTML = hasLan
+      ? (s.qrSvg || "")
+      : '<p style="color:#333;font-size:12px;padding:20px">Couldn\'t detect a LAN IP — use the tunnel command below.</p>';
     $("#deckLanRow").classList.toggle("hidden", !hasLan);
     $("#deckLanUrl").textContent = s.lanUrl || "";
     $("#deckToken").textContent = s.token || "";
     $("#deckTunnelCmd").textContent = `cloudflared tunnel --url http://localhost:${s.port}`;
     $("#deckOpenBtn").dataset.url = s.url || "";
-    if (!hasLan) $("#deckQr").innerHTML =
-      '<p style="color:#333;font-size:12px;padding:20px">Couldn\'t detect a LAN IP — use the tunnel command below.</p>';
   }
 }
 
@@ -748,7 +748,7 @@ async function deckStart() {
     toast("Deck is running ✓", "ok");
   } catch (e) {
     deckDot("stopped");
-    toast(errMsg(e), "err");
+    toast("Deck: " + errMsg(e), "err");
   } finally {
     $("#deckStartBtn").disabled = false;
   }
@@ -756,13 +756,17 @@ async function deckStart() {
 
 async function deckStop() {
   try { await invoke("deck_stop"); renderDeck({ running: false }); toast("Deck stopped", "ok"); }
-  catch (e) { toast("Deck: " + errMsg(e), "err"); }
+  catch (e) {
+    toast("Deck: " + errMsg(e), "err");
+    // Stop failed — resync the UI to the real state instead of leaving it stale.
+    try { renderDeck(await invoke("deck_status")); } catch {}
+  }
 }
 
 async function deckSaveFolder() {
   const path = $("#deckFolder").value.trim();
   try { await invoke("deck_set_folder", { path }); toast("Deck folder saved ✓", "ok"); }
-  catch (e) { toast(errMsg(e), "err"); }
+  catch (e) { toast("Deck: " + errMsg(e), "err"); }
 }
 
 async function copyText(text, okMsg) {

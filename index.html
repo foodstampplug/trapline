@@ -164,22 +164,23 @@
       <div id="deckRunning" class="deck-running hidden">
         <div class="deck-qr" id="deckQr"></div>
         <div id="deckLanRow" class="deck-row">
-          <label>On this Wi-Fi</label>
-          <div class="deck-copy"><code id="deckLanUrl"></code><button id="deckCopyLan" class="ghost-btn sm">Copy</button></div>
+          <label id="deckLanLbl">On this Wi-Fi</label>
+          <div class="deck-copy"><code id="deckLanUrl" aria-labelledby="deckLanLbl"></code><button id="deckCopyLan" class="ghost-btn sm">Copy</button></div>
         </div>
         <div class="deck-row">
-          <label>Token</label>
-          <div class="deck-copy"><code id="deckToken" class="mono"></code><button id="deckCopyToken" class="ghost-btn sm">Copy</button></div>
+          <label id="deckTokenLbl">Token</label>
+          <div class="deck-copy"><code id="deckToken" aria-labelledby="deckTokenLbl"></code><button id="deckCopyToken" class="ghost-btn sm">Copy</button></div>
         </div>
         <div class="deck-row">
-          <label>Off your network? Run a tunnel, then open the printed URL</label>
-          <div class="deck-copy"><code id="deckTunnelCmd" class="mono"></code><button id="deckCopyTunnel" class="ghost-btn sm">Copy</button></div>
+          <label id="deckTunnelLbl">Off your network? Run a tunnel, then open the printed URL</label>
+          <div class="deck-copy"><code id="deckTunnelCmd" aria-labelledby="deckTunnelLbl"></code><button id="deckCopyTunnel" class="ghost-btn sm">Copy</button></div>
         </div>
         <p class="deck-note">Same Wi-Fi? Just scan the QR. First phone connection may need Windows Firewall to allow <b>node.exe</b> (one-time).</p>
       </div>
 
       <details class="deck-adv">
         <summary>Advanced — Deck folder</summary>
+        <label for="deckFolder">Path to your trapline-deck folder</label>
         <div class="deck-copy">
           <input id="deckFolder" type="text" spellcheck="false" placeholder="C:\Users\you\trapline-deck" />
           <button id="deckSaveFolder" class="ghost-btn sm">Save</button>

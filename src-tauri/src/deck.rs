@@ -5,6 +5,7 @@ use crate::AppState;
 use once_cell::sync::Lazy;
 use serde::Serialize;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::State;
@@ -19,7 +20,6 @@ struct DeckProc {
 }
 static DECK: Lazy<Mutex<Option<DeckProc>>> = Lazy::new(|| Mutex::new(None));
 
-use std::sync::atomic::{AtomicBool, Ordering};
 static DECK_STARTING: AtomicBool = AtomicBool::new(false);
 struct StartingGuard;
 impl Drop for StartingGuard {
@@ -41,22 +41,13 @@ pub struct DeckStatus {
 }
 
 fn node_on_path() -> bool {
-    #[cfg(target_os = "windows")]
-    let finder = "where";
-    #[cfg(not(target_os = "windows"))]
-    let finder = "which";
-    Command::new(finder)
-        .arg("node")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+    // Uses the `which` crate rather than spawning `where`/`which`, so there's no
+    // brief console-window flash on Windows.
+    which::which("node").is_ok()
 }
 
-async fn health_ok(port: u16, token: &str) -> bool {
+async fn health_ok(client: &reqwest::Client, port: u16, token: &str) -> bool {
     let url = format!("http://127.0.0.1:{}/api/health", port);
-    let client = reqwest::Client::new();
     match client
         .get(&url)
         .bearer_auth(token)
@@ -124,13 +115,16 @@ pub async fn deck_start(state: State<'_, AppState>) -> Result<DeckStatus, String
     }
     let _starting = StartingGuard; // resets the flag on every return/early-exit
 
+    // One HTTP client reused across the idempotency check and the health poll.
+    let client = reqwest::Client::new();
+
     // Idempotent: if already tracked and healthy, just return it.
     let existing = {
         let guard = DECK.lock().unwrap();
         guard.as_ref().map(|p| (p.pid, p.port, p.token.clone()))
     };
     if let Some((pid, port, token)) = existing {
-        if health_ok(port, &token).await {
+        if health_ok(&client, port, &token).await {
             return Ok(deck_status());
         }
         // stale/unhealthy — kill the old process to free the port before restart
@@ -183,7 +177,14 @@ pub async fn deck_start(state: State<'_, AppState>) -> Result<DeckStatus, String
         .map_err(|e| format!("Failed to launch node: {}", e))?;
     let pid = child.id();
     // Dropping a std Child does NOT kill it; the server keeps running. We track
-    // pid and kill via kill_process on stop/exit.
+    // the pid and kill via kill_process on stop/exit. On Unix, reap the child
+    // once it exits so it can't linger as a zombie (Windows: taskkill handles it).
+    #[cfg(not(target_os = "windows"))]
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    #[cfg(target_os = "windows")]
+    drop(child);
 
     // Register immediately so deck_stop / the exit handler can kill it even
     // during the health-poll window. lan/qr get filled in on success below.
@@ -198,7 +199,7 @@ pub async fn deck_start(state: State<'_, AppState>) -> Result<DeckStatus, String
     // Health poll: up to 25 * 200ms = 5s.
     let mut up = false;
     for _ in 0..25 {
-        if health_ok(port, &token).await {
+        if health_ok(&client, port, &token).await {
             up = true;
             break;
         }
@@ -229,9 +230,14 @@ pub async fn deck_start(state: State<'_, AppState>) -> Result<DeckStatus, String
 
 /// 16 random bytes as 32 lowercase hex chars. Uses the OS RNG.
 pub fn gen_token() -> String {
+    use std::fmt::Write;
     let mut buf = [0u8; 16];
     getrandom::getrandom(&mut buf).expect("OS RNG unavailable");
-    buf.iter().map(|b| format!("{:02x}", b)).collect()
+    let mut s = String::with_capacity(32);
+    for b in buf {
+        let _ = write!(s, "{:02x}", b);
+    }
+    s
 }
 
 /// The Deck project folder: explicit config path if set, else ~/trapline-deck.
@@ -270,7 +276,7 @@ pub fn lan_ip() -> Option<String> {
     let sock = UdpSocket::bind("0.0.0.0:0").ok()?;
     sock.connect("8.8.8.8:80").ok()?;
     match sock.local_addr().ok()?.ip() {
-        IpAddr::V4(v4) if !v4.is_loopback() => Some(v4.to_string()),
+        IpAddr::V4(v4) if !v4.is_loopback() && !v4.is_unspecified() => Some(v4.to_string()),
         _ => None,
     }
 }
@@ -298,7 +304,10 @@ mod tests {
         let a = gen_token();
         let b = gen_token();
         assert_eq!(a.len(), 32);
-        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+        assert!(
+            a.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
+            "token must be lowercase hex, got {a}"
+        );
         assert_ne!(a, b, "two tokens should differ");
     }
 

@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-/// Mirrors Go Config struct — JSON field names must be camelCase to match JS expectations
+/// App configuration, persisted as camelCase JSON to match the JS frontend.
+/// (The webhook/username/shell/community fields mirror the old Go build; the
+/// `deck_*` fields are new for the Deck launcher and have no Go counterpart.)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
@@ -14,10 +16,15 @@ pub struct Config {
     pub shell: String,
     #[serde(default)]
     pub community_discord: String,
+    /// Path to the local Trapline Deck project folder. Empty → resolved to
+    /// `~/trapline-deck` at runtime by `deck::resolve_deck_dir`.
     #[serde(default)]
     pub deck_path: String,
+    /// Port the Deck server listens on (default 8787).
     #[serde(default = "default_deck_port")]
     pub deck_port: u16,
+    /// Auth token Trapline owns and passes to Deck via `DECK_TOKEN`. Empty →
+    /// generated + persisted on the first successful `deck_start`.
     #[serde(default)]
     pub deck_token: String,
 }
