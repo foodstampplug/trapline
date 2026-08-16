@@ -54,7 +54,7 @@
     padding: 1px 5px;
     font-weight: 700;
   }
-  mark.flag.sev-crit {
+  mark.flag.sev-critical {
     background: color-mix(in srgb, var(--crit) 24%, transparent);
     color: var(--crit);
   }
@@ -62,8 +62,12 @@
     background: color-mix(in srgb, var(--high) 22%, transparent);
     color: var(--high);
   }
-  mark.flag.sev-med {
+  mark.flag.sev-medium {
     background: color-mix(in srgb, var(--med) 20%, transparent);
     color: var(--med);
+  }
+  mark.flag.sev-info {
+    background: color-mix(in srgb, var(--muted) 20%, transparent);
+    color: var(--muted);
   }
 </style>

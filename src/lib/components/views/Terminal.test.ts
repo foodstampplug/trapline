@@ -13,7 +13,7 @@ vi.mock('$lib/stores/runs', async () => {
           {
             text: 'admin.app.acme.com 443 OpenSSH 8.2 CVE-2023-38408',
             stream: 'out',
-            spans: [{ s: 0, e: 18, cat: 'host', sev: 'crit', label: 'admin subdomain' }],
+            spans: [{ s: 0, e: 18, cat: 'recon', sev: 'critical', label: 'admin subdomain' }],
           },
         ],
         status: 'running',
@@ -30,5 +30,6 @@ describe('Terminal view', () => {
     expect(screen.getByText(/shodan domain app\.acme\.com/)).toBeInTheDocument();
     const mark = screen.getByText('admin.app.acme.com');
     expect(mark.tagName).toBe('MARK');
+    expect(mark.classList.contains('sev-critical')).toBe(true);
   });
 });
