@@ -12,6 +12,7 @@
   import Tools from '../Tools.svelte';
   import FindingsPanel from '../FindingsPanel.svelte';
   import Loot from '../Loot.svelte';
+  import Settings from '../Settings.svelte';
   import { loadTools } from '$lib/stores/tools';
   import { loadFindings } from '$lib/stores/findings';
   import type { Template } from '$lib/data/templates';
@@ -30,6 +31,7 @@
   let toolsOpen = $state(false);
   let findingsOpen = $state(false);
   let lootOpen = $state(false);
+  let settingsOpen = $state(false);
   let commandBar: CommandBar;
 
   // Shared load-into-command-bar path — both the ⌘K launcher (T5) and the
@@ -67,6 +69,7 @@
       onOpenTools={() => (toolsOpen = true)}
       onOpenFindings={() => (findingsOpen = true)}
       onOpenLoot={() => (lootOpen = true)}
+      onOpenSettings={() => (settingsOpen = true)}
     />
     <TargetsPanel />
     <main class="main">
@@ -149,6 +152,7 @@
   <Tools bind:open={toolsOpen} />
   <FindingsPanel bind:open={findingsOpen} />
   <Loot bind:open={lootOpen} />
+  <Settings bind:open={settingsOpen} />
 </div>
 
 <style>
