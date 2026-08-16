@@ -6,16 +6,19 @@
   import RightDock from './RightDock.svelte';
   import StatusBar from './StatusBar.svelte';
   import Terminal from '../views/Terminal.svelte';
+  import SurfaceMap from '../views/SurfaceMap.svelte';
   import Launcher from '../Launcher.svelte';
   import CommandBar from '../CommandBar.svelte';
   import Playbook from '../Playbook.svelte';
   import Tools from '../Tools.svelte';
   import FindingsPanel from '../FindingsPanel.svelte';
+  import FindingEditor from '../FindingEditor.svelte';
   import Loot from '../Loot.svelte';
   import Settings from '../Settings.svelte';
   import Deck from '../Deck.svelte';
   import { loadTools } from '$lib/stores/tools';
-  import { loadFindings } from '$lib/stores/findings';
+  import { loadFindings, newFinding } from '$lib/stores/findings';
+  import type { Finding } from '$lib/types';
   import type { Template } from '$lib/data/templates';
 
   type ViewId = 'output' | 'map' | 'feed';
@@ -35,6 +38,19 @@
   let settingsOpen = $state(false);
   let deckOpen = $state(false);
   let commandBar: CommandBar;
+
+  // Surface Map's node → finding path: a separate, top-level FindingEditor
+  // host (mirrors FindingsPanel's editor-overlay pattern) so opening it from
+  // a map node doesn't require FindingsPanel itself to be open.
+  let mapFinding = $state<Finding | null>(null);
+
+  function openFindingForHost(host: string): void {
+    mapFinding = { ...newFinding(), endpoint: 'https://' + host };
+  }
+
+  function closeMapFinding(): void {
+    mapFinding = null;
+  }
 
   // Shared load-into-command-bar path — both the ⌘K launcher (T5) and the
   // Playbook drawer (T6) pick a template through this same function, they
@@ -96,25 +112,7 @@
       </div>
 
       <div class="view v-map" class:on={activeView === 'map'}>
-        <svg preserveAspectRatio="none">
-          <line x1="44%" y1="52%" x2="22%" y2="28%" />
-          <line x1="44%" y1="52%" x2="24%" y2="76%" />
-          <line x1="44%" y1="52%" x2="68%" y2="30%" class="hot" />
-          <line x1="44%" y1="52%" x2="70%" y2="72%" />
-          <line x1="68%" y1="30%" x2="86%" y2="15%" class="hot" />
-        </svg>
-        <div class="node center" style="left:44%;top:52%"><span class="d"></span>app.acme.com</div>
-        <div class="node" style="left:22%;top:28%"><span class="d"></span>api :443</div>
-        <div class="node" style="left:24%;top:76%"><span class="d"></span>assets</div>
-        <div class="node flag" style="left:68%;top:30%">
-          <span class="d"></span>admin <span class="sev crit">CVE</span>
-        </div>
-        <div class="node" style="left:70%;top:72%">
-          <span class="d" style="background:var(--med)"></span>staging
-        </div>
-        <div class="node watch" style="left:86%;top:15%">
-          <span class="d"></span>/api/v2/internal <span class="sev high">new</span>
-        </div>
+        <SurfaceMap onCreateFinding={openFindingForHost} />
       </div>
 
       <div class="view v-feed" class:on={activeView === 'feed'}>
@@ -157,6 +155,11 @@
   <Loot bind:open={lootOpen} />
   <Settings bind:open={settingsOpen} />
   <Deck bind:open={deckOpen} />
+  {#if mapFinding}
+    {#key mapFinding.id}
+      <FindingEditor finding={mapFinding} existing={false} onSaved={closeMapFinding} onClose={closeMapFinding} />
+    {/key}
+  {/if}
 </div>
 
 <style>
@@ -227,74 +230,6 @@
   }
   .view.on {
     display: block;
-  }
-
-  .v-map {
-    overflow: hidden;
-    background:
-      radial-gradient(900px 520px at 42% 44%, rgba(122, 162, 255, 0.08), transparent 60%),
-      repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px 34px),
-      repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px 34px);
-  }
-  .v-map svg {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-  }
-  .v-map svg line {
-    stroke: var(--edge2);
-    stroke-width: 1.5;
-  }
-  .v-map svg line.hot {
-    stroke: var(--accent);
-    stroke-dasharray: 4 3;
-  }
-  .node {
-    position: absolute;
-    transform: translate(-50%, -50%);
-    background: rgba(20, 22, 28, 0.72);
-    backdrop-filter: blur(12px);
-    border: 1px solid var(--edge2);
-    border-radius: calc(var(--radius) - 2px);
-    padding: 9px 12px;
-    font: 600 11.5px/1 var(--fmono);
-    white-space: nowrap;
-    box-shadow: var(--shadow);
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    z-index: 2;
-  }
-  .node .d {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--ok);
-  }
-  .node.center {
-    border-color: var(--accent2);
-    font-weight: 700;
-    font-size: 12.5px;
-  }
-  .node.center .d {
-    background: var(--accent2);
-    box-shadow: 0 0 8px var(--accent2);
-  }
-  .node.flag {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(255, 191, 71, 0.18), var(--shadow);
-  }
-  .node.flag .d {
-    background: var(--accent);
-    box-shadow: 0 0 8px var(--accent);
-  }
-  .node.watch {
-    border-color: color-mix(in srgb, var(--high) 55%, transparent);
-  }
-  .node.watch .d {
-    background: var(--high);
-    animation: bl 1.4s infinite;
   }
 
   .v-feed {
@@ -398,18 +333,5 @@
   }
   .sev.crit {
     color: var(--crit);
-  }
-  .flag {
-    background: color-mix(in srgb, var(--accent) 22%, transparent);
-    color: #ffe6b0;
-    border-radius: 3px;
-    padding: 1px 5px;
-    font-weight: 700;
-  }
-
-  @keyframes bl {
-    50% {
-      opacity: 0;
-    }
   }
 </style>
