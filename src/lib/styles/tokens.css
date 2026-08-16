@@ -28,6 +28,12 @@
   /* Glow accents */
   --glowa: rgba(255, 191, 71, 0.12);
 
+  /* Glass surfaces & scrim — shared across modals/panels/inputs */
+  --card-glass: rgba(12, 13, 16, 0.92);
+  --panel-glass: rgba(20, 22, 28, 0.9);
+  --scrim: rgba(0, 0, 0, 0.6);
+  --input-bg: rgba(0, 0, 0, 0.28);
+
   /* Font stacks (system defaults, no bundled fonts) */
   --fui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --fmono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;

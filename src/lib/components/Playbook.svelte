@@ -122,7 +122,7 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: rgba(20, 22, 28, 0.9);
+    background: var(--panel-glass);
     backdrop-filter: blur(22px);
     border-left: 1px solid var(--edge2);
     box-shadow: var(--shadow);
@@ -145,7 +145,7 @@
   }
   .hd .filter {
     flex: 1;
-    background: rgba(0, 0, 0, 0.28);
+    background: var(--input-bg);
     border: 1px solid var(--edge2);
     border-radius: calc(var(--radius) - 8px);
     color: var(--ink);

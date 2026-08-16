@@ -52,7 +52,7 @@
     position: fixed;
     inset: 0;
     z-index: 50;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--scrim);
     backdrop-filter: blur(3px);
     display: flex;
     align-items: center;
@@ -77,7 +77,7 @@
     max-height: 70vh;
     display: flex;
     flex-direction: column;
-    background: rgba(20, 22, 28, 0.9);
+    background: var(--panel-glass);
     backdrop-filter: blur(22px);
     border: 1px solid var(--edge2);
     border-radius: var(--radius);

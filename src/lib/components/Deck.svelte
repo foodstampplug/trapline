@@ -177,7 +177,7 @@
 
           {#if status.lanUrl}
             <div class="deck-row">
-              <label for="deckLanUrl">On this Wi-Fi</label>
+              <span class="deck-label">On this Wi-Fi</span>
               <div class="deck-copy">
                 <code id="deckLanUrl">{status.lanUrl}</code>
                 <button type="button" class="ghost-btn sm" onclick={() => copy(status.lanUrl ?? '', 'lan')}>
@@ -188,7 +188,7 @@
           {/if}
 
           <div class="deck-row">
-            <label for="deckToken">Token</label>
+            <span class="deck-label">Token</span>
             <div class="deck-copy">
               <code id="deckToken">{status.token ?? ''}</code>
               <button type="button" class="ghost-btn sm" onclick={() => copy(status.token ?? '', 'token')}>
@@ -198,7 +198,7 @@
           </div>
 
           <div class="deck-row">
-            <label for="deckTunnelCmd">Off your network? Run a tunnel, then open the printed URL</label>
+            <span class="deck-label">Off your network? Run a tunnel, then open the printed URL</span>
             <div class="deck-copy">
               <code id="deckTunnelCmd">{tunnelCmd}</code>
               <button type="button" class="ghost-btn sm" onclick={() => copy(tunnelCmd, 'tunnel')}>
@@ -244,7 +244,7 @@
     position: fixed;
     inset: 0;
     z-index: 50;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--scrim);
     backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
@@ -268,7 +268,7 @@
     width: min(92vw, 460px);
     max-height: 90vh;
     overflow-y: auto;
-    background: rgba(12, 13, 16, 0.92);
+    background: var(--card-glass);
     backdrop-filter: blur(28px);
     border: var(--bordw) solid var(--edge2);
     border-radius: var(--radius);
@@ -378,7 +378,7 @@
     flex-direction: column;
     gap: 5px;
   }
-  .deck-row label {
+  .deck-row .deck-label {
     font: 700 11px/1.3 var(--fui);
     color: var(--muted);
     text-transform: uppercase;
@@ -392,7 +392,7 @@
   .deck-copy code {
     flex: 1;
     min-width: 0;
-    background: rgba(0, 0, 0, 0.28);
+    background: var(--input-bg);
     border: var(--bordw) solid var(--edge2);
     border-radius: calc(var(--radius) - 6px);
     color: var(--ink);
@@ -404,7 +404,7 @@
   .deck-copy input {
     flex: 1;
     min-width: 0;
-    background: rgba(0, 0, 0, 0.28);
+    background: var(--input-bg);
     border: var(--bordw) solid var(--edge2);
     border-radius: calc(var(--radius) - 6px);
     color: var(--ink);

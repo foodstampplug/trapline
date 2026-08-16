@@ -33,7 +33,7 @@
     display: block;
     width: 100%;
     text-align: left;
-    background: rgba(12, 13, 16, 0.92);
+    background: var(--card-glass);
     backdrop-filter: blur(20px);
     border: var(--bordw) solid var(--edge2);
     border-left: 3px solid var(--muted);

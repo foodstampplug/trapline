@@ -124,7 +124,7 @@
     position: fixed;
     inset: 0;
     z-index: 50;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--scrim);
     backdrop-filter: blur(3px);
     display: flex;
     align-items: flex-start;

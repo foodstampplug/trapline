@@ -131,7 +131,7 @@
     position: fixed;
     inset: 0;
     z-index: 50;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--scrim);
     backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
@@ -155,7 +155,7 @@
     width: min(92vw, 800px);
     max-height: 90vh;
     overflow-y: auto;
-    background: rgba(12, 13, 16, 0.92);
+    background: var(--card-glass);
     backdrop-filter: blur(28px);
     border: var(--bordw) solid var(--edge2);
     border-radius: var(--radius);

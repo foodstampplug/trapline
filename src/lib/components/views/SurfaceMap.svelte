@@ -268,7 +268,7 @@
     bottom: 14px;
     z-index: 5;
     width: 220px;
-    background: rgba(12, 13, 16, 0.92);
+    background: var(--card-glass);
     backdrop-filter: blur(20px);
     border: var(--bordw) solid var(--edge2);
     border-radius: var(--radius);

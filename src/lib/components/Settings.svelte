@@ -3,9 +3,11 @@
   // (webhook URL, webhook display name, community Discord invite, shell).
   // Ported field-for-field from main:index.html #settings / main.js
   // openSettings()/saveSettings()/testWebhook(). Save sends only these 4
-  // fields — the backend's set_config server-side merges the deck_* fields
-  // in (see src/lib/stores/config.ts saveConfig), so there's nothing else
-  // to send here. Same modal-card shell as
+  // fields — saveConfig (src/lib/stores/config.ts) merges them client-side
+  // over the current config before calling the backend, preserving the
+  // deck_* fields already in state (the backend's set_config also preserves
+  // them as a backstop), so there's nothing else to send here. Same
+  // modal-card shell as
   // FindingsPanel.svelte/Loot.svelte/FindingEditor.svelte.
   import { untrack } from 'svelte';
   import { config, saveConfig } from '$lib/stores/config';
@@ -179,7 +181,7 @@
     position: fixed;
     inset: 0;
     z-index: 50;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--scrim);
     backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
@@ -203,7 +205,7 @@
     width: min(92vw, 460px);
     max-height: 90vh;
     overflow-y: auto;
-    background: rgba(12, 13, 16, 0.92);
+    background: var(--card-glass);
     backdrop-filter: blur(28px);
     border: var(--bordw) solid var(--edge2);
     border-radius: var(--radius);
@@ -259,7 +261,7 @@
   .ff-col input,
   .ff-col select {
     width: 100%;
-    background: rgba(0, 0, 0, 0.28);
+    background: var(--input-bg);
     border: var(--bordw) solid var(--edge2);
     border-radius: calc(var(--radius) - 6px);
     color: var(--ink);

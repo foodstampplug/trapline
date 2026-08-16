@@ -75,7 +75,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    background: rgba(0, 0, 0, 0.28);
+    background: var(--input-bg);
     border: 1px solid var(--edge2);
     border-radius: calc(var(--radius) - 4px);
     padding: 9px 11px;
