@@ -6,10 +6,12 @@
 
   let {
     finding,
+    existing = false,
     onSaved,
     onClose,
   }: {
     finding: Finding;
+    existing?: boolean;
     onSaved?: () => void;
     onClose?: () => void;
   } = $props();
@@ -68,14 +70,22 @@
 
   const canSave = $derived(local.title.trim().length > 0);
 
-  function save(): void {
+  async function save(): Promise<void> {
     if (!canSave) return;
-    saveFinding(local);
+    try {
+      await saveFinding(local);
+    } catch (e) {
+      console.error(e);
+    }
     onSaved?.();
   }
 
-  function remove(): void {
-    deleteFinding(local.id);
+  async function remove(): Promise<void> {
+    try {
+      await deleteFinding(local.id);
+    } catch (e) {
+      console.error(e);
+    }
     onClose?.();
   }
 </script>
@@ -237,7 +247,9 @@
     </div>
 
     <div class="modal-actions">
-      <button type="button" class="ghost-btn danger" onclick={remove}>Delete</button>
+      {#if existing}
+        <button type="button" class="ghost-btn danger" onclick={remove}>Delete</button>
+      {/if}
       <span class="spacer"></span>
       <button type="button" class="run-btn" disabled={!canSave} onclick={save}>Save Finding</button>
     </div>
@@ -369,7 +381,7 @@
     cursor: pointer;
   }
   .ff-col select option {
-    background: #0a0a0a;
+    background: var(--bg);
   }
   .ff-col textarea {
     resize: vertical;
@@ -416,7 +428,9 @@
   }
   .run-btn {
     font: 700 13px/1 var(--fdisp);
-    color: #10120f;
+    /* Dark-on-amber text — same hex TargetsPanel.svelte already uses for its
+       .badge on var(--accent); reused rather than adding a new orphan hex. */
+    color: #221a06;
     background: var(--accent);
     border: none;
     border-radius: calc(var(--radius) - 6px);

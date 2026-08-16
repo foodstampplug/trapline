@@ -89,15 +89,26 @@ describe('FindingEditor', () => {
     expect(cvssInput.value).toBe(custom);
   });
 
-  it('delete calls deleteFinding with the finding id and onClose', async () => {
+  it('delete calls deleteFinding with the finding id and onClose (existing finding)', async () => {
     const blank = newFinding();
     const onClose = vi.fn();
-    render(FindingEditor, { props: { finding: blank, onClose } });
+    render(FindingEditor, { props: { finding: blank, existing: true, onClose } });
 
     const deleteBtn = screen.getByRole('button', { name: /delete/i });
     await fireEvent.click(deleteBtn);
 
     expect(deleteFinding).toHaveBeenCalledWith(blank.id);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides the Delete control for a new (not-yet-saved) finding, shows it when existing', () => {
+    const blank = newFinding();
+
+    const { unmount } = render(FindingEditor, { props: { finding: blank } });
+    expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();
+    unmount();
+
+    render(FindingEditor, { props: { finding: blank, existing: true } });
+    expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument();
   });
 });
