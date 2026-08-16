@@ -6,7 +6,7 @@
   // deckStart()/deckStop()/deckSaveFolder()/deckDot()/copyText() (~lines
   // 706-772). Same modal-card shell as FindingsPanel.svelte/Loot.svelte/
   // Settings.svelte.
-  import { deckStart, deckStop, deckStatus, deckSetFolder } from '$lib/bridge';
+  import { deckStart, deckStop, deckStatus, deckSetFolder, openUrl } from '$lib/bridge';
   import type { DeckStatus } from '$lib/types';
 
   let { open = $bindable(false) }: { open?: boolean } = $props();
@@ -78,6 +78,22 @@
     }
   }
 
+  // Ported from main:src/main.js deckOpenBtn's onclick (~lines 827-829):
+  // invoke('open_url', { url }). A plain <a target="_blank"> won't work here
+  // — tauri.conf.json's CSP is default-src 'self' with no navigation
+  // allowlist and no custom new-window handler, so it either no-ops or
+  // navigates the app's own webview away. Route through the Rust
+  // open_url command (tauri-plugin-opener) instead, same as every other
+  // external-link case in this app.
+  async function openOnThisPc(): Promise<void> {
+    if (!status.url) return;
+    try {
+      await openUrl(status.url);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   async function saveFolder(): Promise<void> {
     try {
       await deckSetFolder(folder.trim());
@@ -136,7 +152,7 @@
         {:else}
           <button type="button" class="ghost-btn" onclick={stop}>Stop</button>
           {#if status.url}
-            <a class="ghost-btn" href={status.url} target="_blank" rel="noreferrer">Open on this PC</a>
+            <button type="button" class="ghost-btn" onclick={openOnThisPc}>Open on this PC</button>
           {/if}
         {/if}
       </div>

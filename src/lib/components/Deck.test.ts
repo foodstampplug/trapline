@@ -15,10 +15,11 @@ vi.mock('$lib/bridge', () => ({
   }),
   deckStop: vi.fn(),
   deckSetFolder: vi.fn(),
+  openUrl: vi.fn(),
 }));
 
 import Deck from './Deck.svelte';
-import { deckStart, deckStatus } from '$lib/bridge';
+import { deckStart, deckStatus, openUrl } from '$lib/bridge';
 
 // This project's vite.config.ts doesn't set `test.globals`, so
 // @testing-library/svelte's built-in auto-cleanup never registers — every
@@ -38,5 +39,13 @@ describe('Deck', () => {
 
     expect(deckStart).toHaveBeenCalledTimes(1);
     expect(await screen.findByText(/192\.168\.1\.5/)).toBeInTheDocument();
+
+    // "Open on this PC" must route through the Tauri bridge (tauri-plugin-opener),
+    // not a plain <a target="_blank"> — the app's CSP has no navigation allowlist,
+    // so a bare anchor would no-op or navigate the webview away from the app.
+    const openBtn = await screen.findByRole('button', { name: /open on this pc/i });
+    await fireEvent.click(openBtn);
+
+    expect(openUrl).toHaveBeenCalledWith('http://localhost:8787');
   });
 });
