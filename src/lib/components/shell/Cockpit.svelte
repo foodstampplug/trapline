@@ -11,6 +11,7 @@
   import Playbook from '../Playbook.svelte';
   import Tools from '../Tools.svelte';
   import FindingsPanel from '../FindingsPanel.svelte';
+  import Loot from '../Loot.svelte';
   import { loadTools } from '$lib/stores/tools';
   import { loadFindings } from '$lib/stores/findings';
   import type { Template } from '$lib/data/templates';
@@ -28,6 +29,7 @@
   let playbookOpen = $state(false);
   let toolsOpen = $state(false);
   let findingsOpen = $state(false);
+  let lootOpen = $state(false);
   let commandBar: CommandBar;
 
   // Shared load-into-command-bar path — both the ⌘K launcher (T5) and the
@@ -64,6 +66,7 @@
       onOpenPlaybook={() => (playbookOpen = true)}
       onOpenTools={() => (toolsOpen = true)}
       onOpenFindings={() => (findingsOpen = true)}
+      onOpenLoot={() => (lootOpen = true)}
     />
     <TargetsPanel />
     <main class="main">
@@ -145,6 +148,7 @@
   <Playbook bind:open={playbookOpen} onPick={handlePlaybookPick} />
   <Tools bind:open={toolsOpen} />
   <FindingsPanel bind:open={findingsOpen} />
+  <Loot bind:open={lootOpen} />
 </div>
 
 <style>

@@ -5,6 +5,8 @@ import { writable } from 'svelte/store';
 import type { QEvent, Span } from '$lib/events';
 import { onQEvent } from '$lib/events';
 import { runCommand, cancelCommand } from '$lib/bridge';
+import { addLoot } from './loot';
+import type { FlagHit } from './loot';
 
 export interface RunLine {
   text: string;
@@ -44,8 +46,12 @@ export function applyEvent(e: QEvent): void {
         const line: RunLine = { text: e.text ?? '', stream: e.stream ?? 'out', spans: e.spans ?? [] };
         return { ...r, lines: [...r.lines, line] };
       }
-      // 'done'
-      return { ...r, status: 'done', code: e.code, ms: e.ms, findings: e.findings ?? [] };
+      // 'done' — finalize the run, then feed its flag hits into the loot
+      // store (deduped there against everything already collected this
+      // session). A pure side effect: it never reads back from `runs`.
+      const findings = e.findings ?? [];
+      addLoot(findings as FlagHit[], r.cmdline);
+      return { ...r, status: 'done', code: e.code, ms: e.ms, findings };
     })
   );
 }
