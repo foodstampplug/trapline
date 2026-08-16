@@ -4,6 +4,7 @@
   import TargetsPanel from './TargetsPanel.svelte';
   import RightDock from './RightDock.svelte';
   import StatusBar from './StatusBar.svelte';
+  import Terminal from '../views/Terminal.svelte';
 
   type ViewId = 'output' | 'map' | 'feed';
 
@@ -36,19 +37,7 @@
       </div>
 
       <div class="view v-output" class:on={activeView === 'output'}>
-        <div class="term">
-          <span class="ln"><span class="p">$</span> shodan domain app.acme.com --ports --cve</span>
-          <span class="ln">api.app.acme.com      443,8443   nginx        —</span>
-          <span class="ln"
-            ><span class="flag">admin.app.acme.com</span> 443,22     OpenSSH 8.2  <span
-              style="color:var(--crit)">CVE-2023-38408</span
-            ></span
-          >
-          <span class="ln">staging.app.acme.com  80,443     apache       —</span>
-          <span class="ln"><span class="p">$</span> leakcheck domain app.acme.com</span>
-          <span class="ln"><span class="flag">14 emails</span> in 3 breaches — 6 with plaintext</span>
-          <span class="ln" style="color:var(--ok)">✓ enriched · 2 findings created</span>
-        </div>
+        <Terminal />
       </div>
 
       <div class="view v-map" class:on={activeView === 'map'}>
@@ -176,21 +165,6 @@
   }
   .view.on {
     display: block;
-  }
-
-  .v-output .term {
-    height: 100%;
-    overflow: auto;
-    padding: 13px 15px;
-    font: 12.5px/1.75 var(--fmono);
-  }
-  .v-output .term .ln {
-    display: block;
-    white-space: pre-wrap;
-    color: #c6cdda;
-  }
-  .v-output .term .p {
-    color: var(--accent);
   }
 
   .v-map {

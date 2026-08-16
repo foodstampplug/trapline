@@ -7,6 +7,14 @@ vi.mock('$lib/stores/config', async () => {
   const { writable } = await import('svelte/store');
   return { config: writable({ webhookUrl: 'wh', username: 'Trapline' }), loadConfig: vi.fn() };
 });
+// Cockpit now mounts <Terminal>, which imports the real runs store — that
+// store calls onQEvent (Tauri's `listen`) at module load, which throws
+// outside a real Tauri webview. Mock it out here the same way runs.test.ts
+// and Terminal.test.ts do, since this test only cares about the shell chrome.
+vi.mock('$lib/stores/runs', async () => {
+  const { writable } = await import('svelte/store');
+  return { runs: writable([]) };
+});
 import Cockpit from './Cockpit.svelte';
 
 describe('Cockpit shell', () => {
