@@ -5,12 +5,14 @@
     onOpenFindings,
     onOpenLoot,
     onOpenSettings,
+    onOpenDeck,
   }: {
     onOpenPlaybook?: () => void;
     onOpenTools?: () => void;
     onOpenFindings?: () => void;
     onOpenLoot?: () => void;
     onOpenSettings?: () => void;
+    onOpenDeck?: () => void;
   } = $props();
 </script>
 
@@ -19,7 +21,7 @@
   <button title="Playbook" onclick={() => onOpenPlaybook?.()}>📑</button>
   <button title="Tools" onclick={() => onOpenTools?.()}>🧰</button>
   <button title="Watch">👁<span class="dt"></span></button>
-  <button title="Deck">📡</button>
+  <button title="Deck" onclick={() => onOpenDeck?.()}>📡</button>
   <button title="Loot" onclick={() => onOpenLoot?.()}>💰</button>
   <button title="Findings" onclick={() => onOpenFindings?.()}>🐛</button>
   <button class="sp" title="Settings" onclick={() => onOpenSettings?.()}>⚙</button>
