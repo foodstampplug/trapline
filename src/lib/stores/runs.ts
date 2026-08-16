@@ -7,6 +7,7 @@ import { onQEvent } from '$lib/events';
 import { runCommand, cancelCommand } from '$lib/bridge';
 import { addLoot } from './loot';
 import type { FlagHit } from './loot';
+import { toast } from './toasts';
 
 export interface RunLine {
   text: string;
@@ -34,7 +35,7 @@ export function startRun(cmdline: string): string {
   const id = crypto.randomUUID();
   const run: Run = { id, cmdline, lines: [], status: 'running', findings: [], startedAt: Date.now() };
   runs.update((rs) => [run, ...rs]);
-  void runCommand({ id, cmdline });
+  void runCommand({ id, cmdline }).catch((e) => toast('Run failed: ' + String(e), 'err'));
   return id;
 }
 

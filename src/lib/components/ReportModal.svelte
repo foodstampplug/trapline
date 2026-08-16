@@ -1,6 +1,8 @@
 <script lang="ts">
   // Shows a generated report as plain text — never {@html}/innerHTML, since
   // the markdown embeds untrusted finding content (title/summary/evidence/etc).
+  import { toast } from '$lib/stores/toasts';
+
   let {
     markdown,
     onClose,
@@ -18,6 +20,7 @@
       copied = true;
       clearTimeout(copyTimer);
       copyTimer = setTimeout(() => (copied = false), 1500);
+      toast('Report copied', 'ok');
     } catch (e) {
       console.error(e);
     }

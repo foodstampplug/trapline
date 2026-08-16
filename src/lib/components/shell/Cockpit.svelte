@@ -17,6 +17,7 @@
   import Loot from '../Loot.svelte';
   import Settings from '../Settings.svelte';
   import Deck from '../Deck.svelte';
+  import Toaster from '../Toaster.svelte';
   import { loadTools } from '$lib/stores/tools';
   import { loadFindings, newFinding } from '$lib/stores/findings';
   import type { Finding } from '$lib/types';
@@ -123,6 +124,7 @@
     <RightDock />
   </div>
   <StatusBar />
+  <Toaster />
   <Launcher bind:open={launcherOpen} onPick={handlePick} />
   <Playbook bind:open={playbookOpen} onPick={handlePlaybookPick} />
   <Tools bind:open={toolsOpen} />

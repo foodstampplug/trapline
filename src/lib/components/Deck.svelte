@@ -8,6 +8,7 @@
   // Settings.svelte.
   import { deckStart, deckStop, deckStatus, deckSetFolder, openUrl } from '$lib/bridge';
   import type { DeckStatus } from '$lib/types';
+  import { toast } from '$lib/stores/toasts';
 
   let { open = $bindable(false) }: { open?: boolean } = $props();
 
@@ -62,6 +63,7 @@
     } catch (e) {
       console.error(e);
       dotState = 'stopped';
+      toast('Deck start failed: ' + String(e), 'err');
     } finally {
       starting = false;
     }
@@ -73,6 +75,7 @@
       applyStatus({ running: false });
     } catch (e) {
       console.error(e);
+      toast('Deck stop failed: ' + String(e), 'err');
       // Stop failed — resync to the real state instead of leaving the UI stale.
       await refresh();
     }
@@ -91,6 +94,7 @@
       await openUrl(status.url);
     } catch (e) {
       console.error(e);
+      toast('Open failed: ' + String(e), 'err');
     }
   }
 
@@ -102,6 +106,7 @@
       folderSavedTimer = setTimeout(() => (folderSaved = false), 1500);
     } catch (e) {
       console.error(e);
+      toast('Save folder failed: ' + String(e), 'err');
     }
   }
 
@@ -112,8 +117,10 @@
       copied = label;
       clearTimeout(copiedTimer);
       copiedTimer = setTimeout(() => (copied = null), 1500);
+      toast('Copied', 'ok');
     } catch (e) {
       console.error(e);
+      toast('Copy failed: ' + String(e), 'err');
     }
   }
 

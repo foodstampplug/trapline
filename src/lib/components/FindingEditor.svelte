@@ -3,6 +3,7 @@
   import type { Finding } from '$lib/types';
   import { CVSS_DEFAULTS, type Severity } from '$lib/data/cvss';
   import { saveFinding, deleteFinding } from '$lib/stores/findings';
+  import { toast } from '$lib/stores/toasts';
 
   let {
     finding,
@@ -74,8 +75,10 @@
     if (!canSave) return;
     try {
       await saveFinding(local);
+      toast('Finding saved', 'ok');
     } catch (e) {
       console.error(e);
+      toast('Save failed', 'err');
     }
     onSaved?.();
   }

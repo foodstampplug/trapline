@@ -10,6 +10,7 @@
   import { untrack } from 'svelte';
   import { config, saveConfig } from '$lib/stores/config';
   import { testWebhook } from '$lib/bridge';
+  import { toast } from '$lib/stores/toasts';
 
   let { open = $bindable(false) }: { open?: boolean } = $props();
 
@@ -75,6 +76,7 @@
       saved = true;
       clearTimeout(savedTimer);
       savedTimer = setTimeout(() => (saved = false), 1500);
+      toast('Settings saved', 'ok');
     } catch (e) {
       console.error(e);
     }
@@ -88,9 +90,11 @@
     try {
       await testWebhook(url);
       testResult = 'ok';
+      toast('Webhook test sent', 'ok');
     } catch (e) {
       console.error(e);
       testResult = 'err';
+      toast('Webhook test failed', 'err');
     } finally {
       testing = false;
     }

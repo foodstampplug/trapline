@@ -8,6 +8,7 @@
   import { loot, lootMarkdown, clearLoot, sevRank } from '$lib/stores/loot';
   import type { LootItem } from '$lib/stores/loot';
   import { sendLoot } from '$lib/bridge';
+  import { toast } from '$lib/stores/toasts';
 
   let { open = $bindable(false) }: { open?: boolean } = $props();
 
@@ -47,6 +48,7 @@
       copied = true;
       clearTimeout(copyTimer);
       copyTimer = setTimeout(() => (copied = false), 1500);
+      toast('Loot copied', 'ok');
     } catch (e) {
       console.error(e);
     }
@@ -64,8 +66,10 @@
       sent = true;
       clearTimeout(sentTimer);
       sentTimer = setTimeout(() => (sent = false), 1500);
+      toast('Loot sent to Discord', 'ok');
     } catch (e) {
       console.error(e);
+      toast('Discord: ' + String(e), 'err');
     } finally {
       sending = false;
     }
