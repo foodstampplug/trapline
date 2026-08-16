@@ -7,6 +7,7 @@
   import StatusBar from './StatusBar.svelte';
   import Terminal from '../views/Terminal.svelte';
   import SurfaceMap from '../views/SurfaceMap.svelte';
+  import ActivityFeed from '../views/ActivityFeed.svelte';
   import Launcher from '../Launcher.svelte';
   import CommandBar from '../CommandBar.svelte';
   import Playbook from '../Playbook.svelte';
@@ -116,33 +117,7 @@
       </div>
 
       <div class="view v-feed" class:on={activeView === 'feed'}>
-        <div class="fd-day">Today</div>
-        <div class="tl">
-          <div class="ev w">
-            <div class="c">
-              <div class="eh">
-                <span class="k">👁 Watch</span><span class="sev high">high</span><span class="tm">2m</span>
-              </div>
-              <div class="tt">New route: <b>/api/v2/internal/export</b> <span>— not in baseline</span></div>
-            </div>
-          </div>
-          <div class="ev f">
-            <div class="c">
-              <div class="eh">
-                <span class="k">🔓 LeakCheck</span><span class="sev crit">crit</span><span class="tm">5m</span>
-              </div>
-              <div class="tt"><b>6 plaintext creds</b> for app.acme.com <span>— 3 breaches</span></div>
-            </div>
-          </div>
-          <div class="ev r">
-            <div class="c">
-              <div class="eh"><span class="k">🛰 Shodan</span><span class="tm">8m</span></div>
-              <div class="tt">
-                admin.app.acme.com · <b>CVE-2023-38408</b> <span>— OpenSSH RCE candidate</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ActivityFeed />
       </div>
     </main>
     <RightDock />
@@ -235,103 +210,5 @@
   .v-feed {
     overflow: auto;
     padding: 6px 16px 16px;
-  }
-  .fd-day {
-    font: 700 10px/1 var(--fmono);
-    letter-spacing: 0.11em;
-    text-transform: uppercase;
-    color: var(--dim);
-    margin: 14px 0 2px 30px;
-  }
-  .tl {
-    position: relative;
-    padding-left: 30px;
-  }
-  .tl::before {
-    content: '';
-    position: absolute;
-    left: 9px;
-    top: 6px;
-    bottom: 6px;
-    width: 2px;
-    background: var(--edge);
-  }
-  .ev {
-    position: relative;
-    margin: 12px 0;
-  }
-  .ev::before {
-    content: '';
-    position: absolute;
-    left: -25px;
-    top: 15px;
-    width: 11px;
-    height: 11px;
-    border-radius: 50%;
-    background: var(--muted);
-    border: 3px solid var(--bg);
-    box-shadow: 0 0 0 1px var(--edge);
-  }
-  .ev.w::before {
-    background: var(--high);
-  }
-  .ev.r::before {
-    background: var(--accent2);
-  }
-  .ev.f::before {
-    background: var(--accent);
-  }
-  .ev .c {
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(14px);
-    border: 1px solid var(--edge);
-    border-radius: calc(var(--radius) - 2px);
-    padding: 11px 14px;
-  }
-  .ev.w .c {
-    border-color: color-mix(in srgb, var(--high) 38%, transparent);
-    background: color-mix(in srgb, var(--high) 8%, rgba(255, 255, 255, 0.03));
-  }
-  .ev .eh {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 5px;
-  }
-  .ev .eh .k {
-    font: 700 9.5px/1 var(--fmono);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-  .ev .eh .tm {
-    margin-left: auto;
-    font: 500 10px/1 var(--fmono);
-    color: var(--dim);
-  }
-  .ev .tt {
-    font: 600 12.5px/1.45 var(--fui);
-  }
-  .ev .tt b {
-    font-family: var(--fmono);
-  }
-  .ev .tt span {
-    color: var(--dim);
-  }
-
-  .sev {
-    font: 800 8.5px/1 var(--fmono);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    border: 1.5px solid currentColor;
-    border-radius: 5px;
-    padding: 3px 5px;
-    white-space: nowrap;
-  }
-  .sev.high {
-    color: var(--high);
-  }
-  .sev.crit {
-    color: var(--crit);
   }
 </style>
