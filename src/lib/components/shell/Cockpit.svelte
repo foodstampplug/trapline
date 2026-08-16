@@ -10,7 +10,9 @@
   import CommandBar from '../CommandBar.svelte';
   import Playbook from '../Playbook.svelte';
   import Tools from '../Tools.svelte';
+  import FindingsPanel from '../FindingsPanel.svelte';
   import { loadTools } from '$lib/stores/tools';
+  import { loadFindings } from '$lib/stores/findings';
   import type { Template } from '$lib/data/templates';
 
   type ViewId = 'output' | 'map' | 'feed';
@@ -25,6 +27,7 @@
   let launcherOpen = $state(false);
   let playbookOpen = $state(false);
   let toolsOpen = $state(false);
+  let findingsOpen = $state(false);
   let commandBar: CommandBar;
 
   // Shared load-into-command-bar path — both the ⌘K launcher (T5) and the
@@ -50,6 +53,7 @@
 
   onMount(() => {
     void loadTools();
+    void loadFindings();
   });
 </script>
 
@@ -59,6 +63,7 @@
     <AppRail
       onOpenPlaybook={() => (playbookOpen = true)}
       onOpenTools={() => (toolsOpen = true)}
+      onOpenFindings={() => (findingsOpen = true)}
     />
     <TargetsPanel />
     <main class="main">
@@ -139,6 +144,7 @@
   <Launcher bind:open={launcherOpen} onPick={handlePick} />
   <Playbook bind:open={playbookOpen} onPick={handlePlaybookPick} />
   <Tools bind:open={toolsOpen} />
+  <FindingsPanel bind:open={findingsOpen} />
 </div>
 
 <style>

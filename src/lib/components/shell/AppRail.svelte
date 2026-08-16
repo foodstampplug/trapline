@@ -2,9 +2,11 @@
   let {
     onOpenPlaybook,
     onOpenTools,
+    onOpenFindings,
   }: {
     onOpenPlaybook?: () => void;
     onOpenTools?: () => void;
+    onOpenFindings?: () => void;
   } = $props();
 </script>
 
@@ -14,7 +16,7 @@
   <button title="Tools" onclick={() => onOpenTools?.()}>🧰</button>
   <button title="Watch">👁<span class="dt"></span></button>
   <button title="Deck">📡</button>
-  <button title="Findings">🐛</button>
+  <button title="Findings" onclick={() => onOpenFindings?.()}>🐛</button>
   <button class="sp" title="Settings">⚙</button>
 </div>
 

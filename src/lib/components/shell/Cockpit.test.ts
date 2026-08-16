@@ -22,6 +22,39 @@ vi.mock('$lib/stores/tools', async () => {
   const { writable } = await import('svelte/store');
   return { tools: writable([]), loadTools: vi.fn(), isMissing: () => false };
 });
+// Cockpit now also hosts <FindingsPanel> and calls loadFindings() on mount
+// (→ real bridge invoke, which throws outside a real Tauri webview) — mock
+// the findings store the same way as runs/tools above.
+vi.mock('$lib/stores/findings', async () => {
+  const { writable } = await import('svelte/store');
+  return {
+    findings: writable([]),
+    loadFindings: vi.fn(),
+    saveFinding: vi.fn(),
+    deleteFinding: vi.fn(),
+    newFinding: () => ({
+      id: 'new-1',
+      programName: '',
+      platform: '',
+      title: '',
+      severity: 'medium',
+      status: 'draft',
+      endpoint: '',
+      summary: '',
+      description: '',
+      steps: '',
+      evidence: '',
+      impact: '',
+      remediation: '',
+      cvss: '',
+      cvssScore: '',
+      notes: '',
+      cmdline: '',
+      createdAt: '',
+      updatedAt: '',
+    }),
+  };
+});
 import Cockpit from './Cockpit.svelte';
 
 describe('Cockpit shell', () => {
