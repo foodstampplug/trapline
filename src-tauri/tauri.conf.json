@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "identifier": "com.foodstampplug.trapline",
   "build": {
-    "frontendDist": "../dist",
+    "frontendDist": "../build",
     "devUrl": "http://localhost:1420",
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
