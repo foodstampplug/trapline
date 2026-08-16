@@ -1,10 +1,14 @@
+<script lang="ts">
+  let { onOpenLauncher }: { onOpenLauncher?: () => void } = $props();
+</script>
+
 <div class="top">
   <span class="bd"><span class="mk">◎</span> TRAPLINE</span>
-  <div class="launch">
+  <button type="button" class="launch" onclick={() => onOpenLauncher?.()}>
     <span class="k">⌘K</span>
     <span class="q">shodan domain app.acme.com <span class="mut">· enrich · leakcheck</span></span>
     <span class="cur"></span>
-  </div>
+  </button>
   <span class="acts"><b>🧰</b><b>💰</b><b>⚙</b></span>
 </div>
 
@@ -52,6 +56,10 @@
     border-radius: calc(var(--radius) - 1px);
     padding: 10px 13px;
     box-shadow: 0 0 0 3px var(--glowa);
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
   }
   .launch .k {
     font: 700 10px/1 var(--fmono);

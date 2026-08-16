@@ -5,6 +5,9 @@
   import RightDock from './RightDock.svelte';
   import StatusBar from './StatusBar.svelte';
   import Terminal from '../views/Terminal.svelte';
+  import Launcher from '../Launcher.svelte';
+  import CommandBar from '../CommandBar.svelte';
+  import type { Template } from '$lib/data/templates';
 
   type ViewId = 'output' | 'map' | 'feed';
 
@@ -15,10 +18,21 @@
   };
 
   let activeView = $state<ViewId>('output');
+  let launcherOpen = $state(false);
+  let commandBar: CommandBar;
+
+  function handlePick(t: Template & { cat: string }): void {
+    commandBar?.loadTemplate(t);
+    launcherOpen = false;
+  }
+
+  function handleRun(): void {
+    activeView = 'output';
+  }
 </script>
 
 <div class="cockpit">
-  <TopBar />
+  <TopBar onOpenLauncher={() => (launcherOpen = true)} />
   <div class="body">
     <AppRail />
     <TargetsPanel />
@@ -35,6 +49,8 @@
         </button>
         <span class="meta">{viewMeta[activeView]}</span>
       </div>
+
+      <CommandBar bind:this={commandBar} onRun={handleRun} />
 
       <div class="view v-output" class:on={activeView === 'output'}>
         <Terminal />
@@ -95,6 +111,7 @@
     <RightDock />
   </div>
   <StatusBar />
+  <Launcher bind:open={launcherOpen} onPick={handlePick} />
 </div>
 
 <style>
