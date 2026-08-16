@@ -1,5 +1,6 @@
 <script lang="ts">
   import { flattenTemplates, type Template } from '$lib/data/templates';
+  import { isMissing } from '$lib/stores/tools';
 
   type FlatTemplate = Template & { cat: string };
 
@@ -104,7 +105,12 @@
             onmouseenter={() => (activeIndex = i)}
             onclick={() => pick(t)}
           >
-            <span class="name">{t.name}</span>
+            <span class="name">
+              {t.name}
+              {#if t.tool && isMissing(t.tool)}
+                <span class="warn">⚠ no {t.tool}</span>
+              {/if}
+            </span>
             <span class="cat">{t.cat}</span>
           </button>
         {/each}
@@ -221,5 +227,14 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
     color: var(--muted);
+  }
+  .row .warn {
+    margin-left: 8px;
+    font: 700 9.5px/1 var(--fmono);
+    color: var(--high);
+    border: 1px solid color-mix(in srgb, var(--high) 45%, transparent);
+    border-radius: 5px;
+    padding: 3px 5px;
+    white-space: nowrap;
   }
 </style>

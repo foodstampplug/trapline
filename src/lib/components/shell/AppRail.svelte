@@ -1,5 +1,17 @@
+<script lang="ts">
+  let {
+    onOpenPlaybook,
+    onOpenTools,
+  }: {
+    onOpenPlaybook?: () => void;
+    onOpenTools?: () => void;
+  } = $props();
+</script>
+
 <div class="rail">
   <button class="on" title="Recon">▚</button>
+  <button title="Playbook" onclick={() => onOpenPlaybook?.()}>📑</button>
+  <button title="Tools" onclick={() => onOpenTools?.()}>🧰</button>
   <button title="Watch">👁<span class="dt"></span></button>
   <button title="Deck">📡</button>
   <button title="Findings">🐛</button>

@@ -15,6 +15,13 @@ vi.mock('$lib/stores/runs', async () => {
   const { writable } = await import('svelte/store');
   return { runs: writable([]) };
 });
+// Cockpit now also calls loadTools() on mount (→ real toolCheck()/invoke,
+// which throws outside a real Tauri webview) — mock the tools store the
+// same way, so this render-only test never touches the Tauri bridge.
+vi.mock('$lib/stores/tools', async () => {
+  const { writable } = await import('svelte/store');
+  return { tools: writable([]), loadTools: vi.fn(), isMissing: () => false };
+});
 import Cockpit from './Cockpit.svelte';
 
 describe('Cockpit shell', () => {

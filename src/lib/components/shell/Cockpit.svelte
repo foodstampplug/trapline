@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import TopBar from './TopBar.svelte';
   import AppRail from './AppRail.svelte';
   import TargetsPanel from './TargetsPanel.svelte';
@@ -7,6 +8,9 @@
   import Terminal from '../views/Terminal.svelte';
   import Launcher from '../Launcher.svelte';
   import CommandBar from '../CommandBar.svelte';
+  import Playbook from '../Playbook.svelte';
+  import Tools from '../Tools.svelte';
+  import { loadTools } from '$lib/stores/tools';
   import type { Template } from '$lib/data/templates';
 
   type ViewId = 'output' | 'map' | 'feed';
@@ -19,22 +23,43 @@
 
   let activeView = $state<ViewId>('output');
   let launcherOpen = $state(false);
+  let playbookOpen = $state(false);
+  let toolsOpen = $state(false);
   let commandBar: CommandBar;
 
-  function handlePick(t: Template & { cat: string }): void {
+  // Shared load-into-command-bar path — both the ⌘K launcher (T5) and the
+  // Playbook drawer (T6) pick a template through this same function, they
+  // just differ in which panel they close afterward.
+  function loadPicked(t: Template & { cat: string }): void {
     commandBar?.loadTemplate(t);
+  }
+
+  function handlePick(t: Template & { cat: string }): void {
+    loadPicked(t);
     launcherOpen = false;
+  }
+
+  function handlePlaybookPick(t: Template & { cat: string }): void {
+    loadPicked(t);
+    playbookOpen = false;
   }
 
   function handleRun(): void {
     activeView = 'output';
   }
+
+  onMount(() => {
+    void loadTools();
+  });
 </script>
 
 <div class="cockpit">
   <TopBar onOpenLauncher={() => (launcherOpen = true)} />
   <div class="body">
-    <AppRail />
+    <AppRail
+      onOpenPlaybook={() => (playbookOpen = true)}
+      onOpenTools={() => (toolsOpen = true)}
+    />
     <TargetsPanel />
     <main class="main">
       <div class="views">
@@ -112,6 +137,8 @@
   </div>
   <StatusBar />
   <Launcher bind:open={launcherOpen} onPick={handlePick} />
+  <Playbook bind:open={playbookOpen} onPick={handlePlaybookPick} />
+  <Tools bind:open={toolsOpen} />
 </div>
 
 <style>
