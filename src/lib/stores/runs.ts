@@ -22,6 +22,7 @@ export interface Run {
   code?: number;
   ms?: number;
   findings: unknown[];
+  startedAt: number;
 }
 
 export const runs = writable<Run[]>([]);
@@ -31,7 +32,7 @@ export const runs = writable<Run[]>([]);
  * arrive later via `applyEvent`, wired to `onQEvent` below). */
 export function startRun(cmdline: string): string {
   const id = crypto.randomUUID();
-  const run: Run = { id, cmdline, lines: [], status: 'running', findings: [] };
+  const run: Run = { id, cmdline, lines: [], status: 'running', findings: [], startedAt: Date.now() };
   runs.update((rs) => [run, ...rs]);
   void runCommand({ id, cmdline });
   return id;
