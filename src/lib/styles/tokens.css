@@ -1,0 +1,35 @@
+:root {
+  /* Core palette — Obsidian-amber theme */
+  --bg: #0a0b0e;
+  --panel: rgba(255, 255, 255, 0.03);
+  --edge: rgba(255, 255, 255, 0.08);
+  --ink: #eef1f6;
+  --muted: #98a1af;
+  --accent: #ffbf47;
+  --accent2: #7aa2ff;
+  --ok: #4fe3a0;
+  --high: #ff9d3a;
+  --crit: #ff6b6b;
+  --med: #ffd166;
+
+  /* Derived surfaces */
+  --panel2: rgba(255, 255, 255, 0.05);
+  --panel3: rgba(255, 255, 255, 0.07);
+  --edge2: rgba(255, 255, 255, 0.15);
+  --dim: #5f6773;
+
+  /* Layout & spacing */
+  --radius: 14px;
+  --bordw: 1px;
+
+  /* Shadow (inset + drop) */
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 22px 48px rgba(0, 0, 0, 0.5);
+
+  /* Glow accents */
+  --glowa: rgba(255, 191, 71, 0.12);
+
+  /* Font stacks (system defaults, no bundled fonts) */
+  --fui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fmono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  --fdisp: var(--fui);
+}

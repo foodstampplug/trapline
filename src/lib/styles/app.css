@@ -1,0 +1,38 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: radial-gradient(
+      1150px 540px at 84% -12%,
+      rgba(255, 191, 71, 0.13),
+      transparent 60%
+    ),
+    radial-gradient(
+      780px 470px at 4% 114%,
+      rgba(122, 162, 255, 0.1),
+      transparent 60%
+    ),
+    var(--bg);
+  color: var(--ink);
+  font-family: var(--fui);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
