@@ -46,11 +46,24 @@ pub fn run() {
             deck::deck_stop,
             deck::deck_status,
             deck::deck_set_folder,
+            watch::scheduler::watch_start,
+            watch::scheduler::watch_stop,
+            watch::scheduler::watch_status,
+            watch::scheduler::watch_run_once,
         ])
+        .setup(|app| {
+            use tauri::Manager;
+            let enabled = app.state::<AppState>().config.lock().unwrap().watch_enabled;
+            if enabled {
+                watch::scheduler::start(app.handle().clone());
+            }
+            Ok(())
+        })
         .build(tauri::generate_context!())
         .expect("error while building Trapline")
         .run(|_app, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
+                watch::scheduler::stop_flag();
                 let _ = deck::deck_stop();
             }
         });

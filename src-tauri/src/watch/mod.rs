@@ -7,6 +7,7 @@ pub mod engine;
 pub mod fetch;
 pub mod normalize;
 pub mod parse;
+pub mod scheduler;
 pub mod score;
 pub mod sink;
 pub mod sourcemap;
