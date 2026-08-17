@@ -3,6 +3,7 @@
 //! config/alert/findings edges are rewired to the app.
 
 pub mod config;
+pub mod engine;
 pub mod fetch;
 pub mod normalize;
 pub mod parse;
