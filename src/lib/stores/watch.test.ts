@@ -6,7 +6,7 @@ vi.mock('$lib/bridge', () => ({
   watchStop: vi.fn(() => Promise.resolve()),
   watchRunOnce: vi.fn(() => Promise.resolve()),
   watchStatus: vi.fn(() =>
-    Promise.resolve({ running: false, targets: 0, intervalSecs: 1800, lastRunMs: 0, lastAssets: 0, lastNew: 0 }),
+    Promise.resolve({ running: true, targets: 3, intervalSecs: 900, lastRunMs: 123, lastAssets: 18, lastNew: 2 }),
   ),
 }));
 vi.mock('$lib/events', () => ({
@@ -24,12 +24,14 @@ describe('watch store', () => {
   it('refreshWatch pulls status from the bridge into the store', async () => {
     await refreshWatch();
     expect(bridge.watchStatus).toHaveBeenCalled();
-    expect(get(watch).intervalSecs).toBe(1800);
+    expect(get(watch).intervalSecs).toBe(900);
+    expect(get(watch).targets).toBe(3);
   });
 
   it('startWatch calls the bridge then refreshes', async () => {
     await startWatch();
     expect(bridge.watchStart).toHaveBeenCalled();
     expect(bridge.watchStatus).toHaveBeenCalled();
+    expect(get(watch).intervalSecs).toBe(900);
   });
 });

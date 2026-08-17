@@ -121,8 +121,8 @@ describe('command bridge', () => {
       deckToken: '',
       watchTargets: [],
       watchIntervalSecs: 1800,
-      watchAlertThreshold: 1,
-      watchMaxRpm: 60,
+      watchAlertThreshold: 50,
+      watchMaxRpm: 30,
       watchEnabled: false,
     };
     await bridge.setConfig(config);

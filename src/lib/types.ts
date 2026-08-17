@@ -18,7 +18,7 @@ export interface Config {
   watchEnabled: boolean;
 }
 
-// src-tauri/src/watch/scheduler.rs (WatchTarget) — #[serde(rename_all = "camelCase")]
+// src-tauri/src/config.rs (WatchTarget) — #[serde(rename_all = "camelCase")]
 export interface WatchTarget {
   name: string;
   pages: string[];
