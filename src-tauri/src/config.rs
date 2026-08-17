@@ -2,6 +2,23 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+/// One watch target: pages to scan + direct JS URLs, gated by `in_scope`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchTarget {
+    pub name: String,
+    #[serde(default)]
+    pub pages: Vec<String>,
+    #[serde(default)]
+    pub js: Vec<String>,
+    /// Safety gate: only hosts matching these suffixes are ever fetched.
+    #[serde(default)]
+    pub in_scope: Vec<String>,
+    /// Phase-3 hook: auto-run Shodan/LeakCheck enrichment on new findings.
+    #[serde(default)]
+    pub auto_enrich: bool,
+}
+
 /// App configuration, persisted as camelCase JSON to match the JS frontend.
 /// (The webhook/username/shell/community fields mirror the old Go build; the
 /// `deck_*` fields are new for the Deck launcher and have no Go counterpart.)
@@ -27,6 +44,19 @@ pub struct Config {
     /// generated + persisted on the first successful `deck_start`.
     #[serde(default)]
     pub deck_token: String,
+    /// Watch targets (change-detection). Managed via Settings, persisted here.
+    #[serde(default)]
+    pub watch_targets: Vec<WatchTarget>,
+    #[serde(default = "default_watch_interval")]
+    pub watch_interval_secs: u64,
+    #[serde(default = "default_watch_threshold")]
+    pub watch_alert_threshold: i64,
+    #[serde(default = "default_watch_rpm")]
+    pub watch_max_rpm: u32,
+    /// Runtime state: is the scheduler currently on? Auto-resumed on launch.
+    /// Not a Settings-form field — preserved across Settings saves.
+    #[serde(default)]
+    pub watch_enabled: bool,
 }
 
 fn default_username() -> String {
@@ -35,6 +65,18 @@ fn default_username() -> String {
 
 fn default_deck_port() -> u16 {
     8787
+}
+
+fn default_watch_interval() -> u64 {
+    1800
+}
+
+fn default_watch_threshold() -> i64 {
+    50
+}
+
+fn default_watch_rpm() -> u32 {
+    30
 }
 
 impl Default for Config {
@@ -47,6 +89,11 @@ impl Default for Config {
             deck_path: String::new(),
             deck_port: 8787,
             deck_token: String::new(),
+            watch_targets: Vec::new(),
+            watch_interval_secs: 1800,
+            watch_alert_threshold: 50,
+            watch_max_rpm: 30,
+            watch_enabled: false,
         }
     }
 }
@@ -102,10 +149,12 @@ pub fn save(cfg: &Config) {
 
 /// Carry Deck fields (which the Settings form does not round-trip) from the
 /// existing config onto an incoming one, so saving Settings never wipes them.
+/// Also preserves watch_enabled (runtime state managed by the scheduler).
 pub fn preserve_deck_fields(mut incoming: Config, current: &Config) -> Config {
     incoming.deck_path = current.deck_path.clone();
     incoming.deck_port = current.deck_port;
     incoming.deck_token = current.deck_token.clone();
+    incoming.watch_enabled = current.watch_enabled;
     incoming
 }
 
@@ -144,5 +193,45 @@ mod tests {
         assert_eq!(merged.deck_port, 9001);
         assert_eq!(merged.deck_token, "cafebabecafebabecafebabecafebabe");
         assert_eq!(merged.webhook_url, "wh"); // non-deck fields still come from incoming
+    }
+
+    #[test]
+    fn old_config_json_loads_with_watch_defaults() {
+        // A config.json written before the watch fields existed.
+        let old = r#"{"webhookUrl":"","username":"Trapline","shell":"","communityDiscord":""}"#;
+        let cfg: Config = serde_json::from_str(old).expect("old config must still parse");
+        assert_eq!(cfg.watch_interval_secs, 1800);
+        assert_eq!(cfg.watch_alert_threshold, 50);
+        assert_eq!(cfg.watch_max_rpm, 30);
+        assert!(!cfg.watch_enabled);
+        assert!(cfg.watch_targets.is_empty());
+    }
+
+    #[test]
+    fn watch_target_round_trips_camelcase() {
+        let t = WatchTarget {
+            name: "acme".into(),
+            pages: vec!["https://app.acme.com".into()],
+            js: vec![],
+            in_scope: vec!["acme.com".into()],
+            auto_enrich: true,
+        };
+        let j = serde_json::to_string(&t).unwrap();
+        assert!(j.contains("\"inScope\""), "expected camelCase inScope, got {j}");
+        assert!(j.contains("\"autoEnrich\""));
+        let back: WatchTarget = serde_json::from_str(&j).unwrap();
+        assert_eq!(back.name, "acme");
+        assert_eq!(back.in_scope, vec!["acme.com".to_string()]);
+    }
+
+    #[test]
+    fn preserve_deck_fields_also_carries_watch_enabled() {
+        let mut current = Config::default();
+        current.watch_enabled = true; // scheduler turned it on at runtime
+        // Incoming from the Settings form has watch_enabled = false (form doesn't own it):
+        let incoming = Config { webhook_url: "wh".into(), ..Config::default() };
+        let merged = preserve_deck_fields(incoming, &current);
+        assert!(merged.watch_enabled, "runtime watch_enabled must survive a Settings save");
+        assert_eq!(merged.webhook_url, "wh");
     }
 }
