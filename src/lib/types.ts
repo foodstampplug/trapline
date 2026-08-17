@@ -11,6 +11,30 @@ export interface Config {
   deckPath: string;
   deckPort: number;
   deckToken: string;
+  watchTargets: WatchTarget[];
+  watchIntervalSecs: number;
+  watchAlertThreshold: number;
+  watchMaxRpm: number;
+  watchEnabled: boolean;
+}
+
+// src-tauri/src/watch/scheduler.rs (WatchTarget) — #[serde(rename_all = "camelCase")]
+export interface WatchTarget {
+  name: string;
+  pages: string[];
+  js: string[];
+  inScope: string[];
+  autoEnrich: boolean;
+}
+
+// src-tauri/src/watch/scheduler.rs (WatchStatus) — #[serde(rename_all = "camelCase")]
+export interface WatchStatus {
+  running: boolean;
+  targets: number;
+  intervalSecs: number;
+  lastRunMs: number;
+  lastAssets: number;
+  lastNew: number;
 }
 
 // src-tauri/src/commands.rs:23-28 (ToolInfo)

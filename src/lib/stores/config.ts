@@ -2,7 +2,10 @@ import { writable } from 'svelte/store';
 import type { Config } from '$lib/types';
 import { getConfig, setConfig } from '$lib/bridge';
 
-const EMPTY: Config = { webhookUrl: '', username: 'Trapline', shell: '', communityDiscord: '', deckPath: '', deckPort: 8787, deckToken: '' };
+const EMPTY: Config = {
+  webhookUrl: '', username: 'Trapline', shell: '', communityDiscord: '', deckPath: '', deckPort: 8787, deckToken: '',
+  watchTargets: [], watchIntervalSecs: 1800, watchAlertThreshold: 1, watchMaxRpm: 60, watchEnabled: false,
+};
 export const config = writable<Config>(EMPTY);
 let current = EMPTY;
 config.subscribe((v) => (current = v));

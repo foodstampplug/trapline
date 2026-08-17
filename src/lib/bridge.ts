@@ -12,6 +12,7 @@ import type {
   Session,
   SendCardArgs,
   SendLootArgs,
+  WatchStatus,
 } from './types';
 
 // ── Run / cancel commands (src-tauri/src/commands.rs:92-122) ────────────────
@@ -58,3 +59,9 @@ export const deckStart = () => invoke<DeckStatus>('deck_start');
 export const deckStop = () => invoke<void>('deck_stop');
 export const deckStatus = () => invoke<DeckStatus>('deck_status');
 export const deckSetFolder = (path: string) => invoke<void>('deck_set_folder', { path });
+
+// ── Watch (src-tauri/src/watch/scheduler.rs) ────────────────────────────────
+export const watchStart = () => invoke<void>('watch_start');
+export const watchStop = () => invoke<void>('watch_stop');
+export const watchStatus = () => invoke<WatchStatus>('watch_status');
+export const watchRunOnce = () => invoke<void>('watch_run_once');

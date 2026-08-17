@@ -119,6 +119,11 @@ describe('command bridge', () => {
       deckPath: '',
       deckPort: 8787,
       deckToken: '',
+      watchTargets: [],
+      watchIntervalSecs: 1800,
+      watchAlertThreshold: 1,
+      watchMaxRpm: 60,
+      watchEnabled: false,
     };
     await bridge.setConfig(config);
     expect(invoke).toHaveBeenCalledWith('set_config', { config });
