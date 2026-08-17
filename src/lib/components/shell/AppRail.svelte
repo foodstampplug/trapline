@@ -1,6 +1,7 @@
 <script lang="ts">
   import { findings } from '$lib/stores/findings';
   import { loot } from '$lib/stores/loot';
+  import { watch } from '$lib/stores/watch';
 
   let {
     onOpenPlaybook,
@@ -23,7 +24,9 @@
   <button class="on" title="Recon">▚</button>
   <button title="Playbook" onclick={() => onOpenPlaybook?.()}>📑</button>
   <button title="Tools" onclick={() => onOpenTools?.()}>🧰</button>
-  <button title="Watch">👁<span class="dt"></span></button>
+  <button title="Watch" class:live={$watch.running}
+    >👁{#if $watch.running}<span class="dt"></span>{/if}</button
+  >
   <button title="Deck" onclick={() => onOpenDeck?.()}>📡</button>
   <button title="Loot" onclick={() => onOpenLoot?.()}
     >💰{#if $loot.length}<span class="count">{$loot.length}</span>{/if}</button
@@ -63,6 +66,9 @@
     background: color-mix(in srgb, var(--accent) 18%, transparent);
     color: var(--ink);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  .rail button.live {
+    color: var(--ok);
   }
   .rail button .dt {
     position: absolute;

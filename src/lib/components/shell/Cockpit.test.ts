@@ -55,6 +55,17 @@ vi.mock('$lib/stores/findings', async () => {
     }),
   };
 });
+// Cockpit now also calls initWatch() on mount (→ real Tauri listen()/invoke,
+// which throws outside a real Tauri webview) — mock the watch store the same
+// way as findings/tools/runs above, mirroring watch.test.ts's bridge/events
+// mocks but at the store level since this test only cares about shell chrome.
+vi.mock('$lib/stores/watch', async () => {
+  const { writable } = await import('svelte/store');
+  return {
+    watch: writable({ running: false, targets: 0, intervalSecs: 1800, lastRunMs: 0, lastAssets: 0, lastNew: 0 }),
+    initWatch: vi.fn(() => Promise.resolve()),
+  };
+});
 import Cockpit from './Cockpit.svelte';
 
 describe('Cockpit shell', () => {

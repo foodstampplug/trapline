@@ -20,6 +20,7 @@
   import Toaster from '../Toaster.svelte';
   import { loadTools } from '$lib/stores/tools';
   import { loadFindings, newFinding } from '$lib/stores/findings';
+  import { initWatch } from '$lib/stores/watch';
   import type { Finding } from '$lib/types';
   import type { Template } from '$lib/data/templates';
 
@@ -78,6 +79,7 @@
   onMount(() => {
     void loadTools();
     void loadFindings();
+    void initWatch();
   });
 </script>
 

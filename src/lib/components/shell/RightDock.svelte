@@ -1,37 +1,63 @@
+<script lang="ts">
+  import { watch } from '$lib/stores/watch';
+  import { findings } from '$lib/stores/findings';
+
+  // Mirrors FindingsPanel.svelte's SEV_ORDER — worst-first sort.
+  const SEV_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+  const SEV_ABBR: Record<string, string> = { critical: 'C', high: 'H', medium: 'M', low: 'L', info: 'I' };
+
+  function timeAgo(ms: number): string {
+    if (!ms) return '—';
+    const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+    if (s < 60) return `${s}s`;
+    if (s < 3600) return `${Math.floor(s / 60)}m`;
+    return `${Math.floor(s / 3600)}h`;
+  }
+
+  // Worst-first, capped for the dock.
+  $: sortedFindings = [...$findings].sort(
+    (a, b) => (SEV_ORDER[a.severity] ?? 5) - (SEV_ORDER[b.severity] ?? 5) || b.createdAt.localeCompare(a.createdAt),
+  );
+</script>
+
 <div class="right">
   <div class="wbox">
     <div class="ph" style="border:0;padding:0 0 9px">
-      Watch <span class="wlive"><span class="p"></span>live</span>
+      Watch
+      {#if $watch.running}
+        <span class="wlive"><span class="p"></span>live</span>
+      {:else}
+        <span class="wlive off">idle</span>
+      {/if}
     </div>
-    <div class="wl">
-      <span class="sev high">new</span>
-      <div class="t">Route <b>/api/v2/internal/export</b><span>not in baseline</span></div>
-    </div>
+    {#if $watch.lastNew > 0}
+      <div class="wl">
+        <span class="sev high">new</span>
+        <div class="t"><b>{$watch.lastNew} new artifacts</b><span>since last cycle</span></div>
+      </div>
+    {:else}
+      <div class="wl off">
+        <span class="sev">—</span>
+        <div class="t">No changes<span>since last cycle</span></div>
+      </div>
+    {/if}
     <div class="wm">
-      <div>Last<b>2m</b></div>
-      <div>Assets<b>18</b></div>
-      <div>New<b>3</b></div>
-      <div>Every<b>30m</b></div>
+      <div>Last<b>{timeAgo($watch.lastRunMs)}</b></div>
+      <div>Assets<b>{$watch.lastAssets}</b></div>
+      <div>New<b>{$watch.lastNew}</b></div>
+      <div>Every<b>{Math.round($watch.intervalSecs / 60)}m</b></div>
     </div>
   </div>
   <div class="findbox">
-    <div class="ph">Findings <span class="c">4</span></div>
+    <div class="ph">Findings <span class="c">{$findings.length}</span></div>
     <div class="fl">
-      <div class="fi">
-        <span class="sev crit">C</span>
-        <div class="t">Creds in breach dump<span>leakcheck · 6 plaintext</span></div>
-        <span class="go">›</span>
-      </div>
-      <div class="fi">
-        <span class="sev high">H</span>
-        <div class="t">Admin OpenSSH CVE<span>admin.app.acme.com</span></div>
-        <span class="go">›</span>
-      </div>
-      <div class="fi">
-        <span class="sev high">H</span>
-        <div class="t">Admin panel exposed<span>admin.app.acme.com</span></div>
-        <span class="go">›</span>
-      </div>
+      {#each sortedFindings.slice(0, 6) as f (f.id)}
+        <div class="fi">
+          <span class="sev {f.severity}">{SEV_ABBR[f.severity] ?? '•'}</span>
+          <div class="t">{f.title}<span>{f.programName || f.endpoint}</span></div>
+          <span class="go">›</span>
+        </div>
+      {/each}
     </div>
   </div>
 </div>
@@ -78,8 +104,20 @@
   .sev.high {
     color: var(--high);
   }
-  .sev.crit {
+  .sev.crit,
+  .sev.critical {
     color: var(--crit);
+  }
+  .sev.medium {
+    color: var(--med);
+  }
+  /* No dedicated --low/--info tokens in tokens.css — reuse the closest
+     existing token, same mapping FindingsPanel.svelte's .dot.low/.dot.info use. */
+  .sev.low {
+    color: var(--ok);
+  }
+  .sev.info {
+    color: var(--dim);
   }
   .wbox {
     padding: 11px;
@@ -93,6 +131,11 @@
     border: 1px solid color-mix(in srgb, var(--high) 40%, transparent);
     border-radius: calc(var(--radius) - 3px);
     padding: 10px;
+  }
+  .wl.off {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: var(--edge);
+    color: var(--dim);
   }
   .wl .t {
     font: 600 11.5px/1.35 var(--fui);
@@ -138,6 +181,9 @@
     border-radius: 50%;
     background: var(--ok);
     animation: bl 1.4s infinite;
+  }
+  .wlive.off {
+    color: var(--dim);
   }
   .findbox {
     display: flex;
