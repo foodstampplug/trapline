@@ -6,6 +6,7 @@ mod findings;
 mod flags;
 mod runner;
 mod session;
+mod watch;
 
 use std::sync::Mutex;
 use config::Config;
