@@ -1,7 +1,7 @@
 use crate::AppState;
 use once_cell::sync::Lazy;
 use serde::Serialize;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
@@ -12,6 +12,11 @@ use super::store::Store;
 
 /// The scheduler is a single background thread; this flag is its run gate.
 static WATCH_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// Bumped on every `start()`. Lets a superseded thread from a fast stop→start
+/// race notice it's stale (its `my_gen` no longer matches) and exit, even if
+/// `WATCH_RUNNING` got flipped back to `true` before it observed the `false`.
+static WATCH_GEN: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Default, Clone)]
 struct Runtime {
@@ -118,14 +123,21 @@ pub fn start(app: AppHandle) {
     if WATCH_RUNNING.swap(true, Ordering::SeqCst) {
         return; // already running
     }
+    // This thread's generation. A subsequent start() (e.g. a fast stop→start
+    // race) bumps WATCH_GEN again, so this thread notices it's been
+    // superseded even if WATCH_RUNNING got flipped back to true first.
+    let my_gen = WATCH_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     set_enabled(&app, true);
     std::thread::spawn(move || {
-        while WATCH_RUNNING.load(Ordering::SeqCst) {
+        while WATCH_RUNNING.load(Ordering::SeqCst) && WATCH_GEN.load(Ordering::SeqCst) == my_gen {
             run_cycle(&app);
             let interval = snapshot(&app).watch_interval_secs.max(1);
             let mut slept = 0u64;
             // Sleep in 1s steps so a stop is responsive.
-            while slept < interval && WATCH_RUNNING.load(Ordering::SeqCst) {
+            while slept < interval
+                && WATCH_RUNNING.load(Ordering::SeqCst)
+                && WATCH_GEN.load(Ordering::SeqCst) == my_gen
+            {
                 std::thread::sleep(Duration::from_secs(1));
                 slept += 1;
             }
@@ -203,6 +215,43 @@ pub fn to_engine_config(app: &AppConfig, database: String) -> EngineConfig {
 mod tests {
     use super::*;
     use crate::config::{Config as AppConfig, WatchTarget};
+
+    /// Models the fast stop→start race from the review finding using local
+    /// atomics (not the module-global WATCH_RUNNING/WATCH_GEN, so this can't
+    /// interfere with other tests running in parallel). Before the generation
+    /// counter, a superseded thread's loop condition was just `running.load()`,
+    /// which a following start() flips back to true — the old thread would
+    /// never notice it had been replaced. The generation check closes that:
+    /// a thread only keeps looping while ITS captured generation is still the
+    /// current one.
+    #[test]
+    fn stale_generation_no_longer_matches_after_a_fast_stop_then_start() {
+        let running = AtomicBool::new(false);
+        let gen = AtomicU64::new(0);
+
+        // start() #1 — thread A captures its generation.
+        running.store(true, Ordering::SeqCst);
+        let a_gen = gen.fetch_add(1, Ordering::SeqCst) + 1;
+        assert!(running.load(Ordering::SeqCst) && gen.load(Ordering::SeqCst) == a_gen);
+
+        // stop() — flips the flag off. (Old code: A's loop condition alone
+        // would already catch this. Kept here to model the full sequence.)
+        running.store(false, Ordering::SeqCst);
+
+        // start() #2, before A polls again (the race window) — flips the flag
+        // back on AND bumps the generation.
+        running.store(true, Ordering::SeqCst);
+        let b_gen = gen.fetch_add(1, Ordering::SeqCst) + 1;
+
+        // A's next poll: the flag alone says "keep going" (this is exactly the
+        // bug — flag-only would let A run forever alongside B), but A's
+        // captured generation no longer matches, so A's real loop condition
+        // (running && gen == my_gen) is false and it exits.
+        assert!(running.load(Ordering::SeqCst), "flag flipped back true (the trap)");
+        assert_ne!(a_gen, gen.load(Ordering::SeqCst), "A's generation must be stale");
+        assert_eq!(b_gen, gen.load(Ordering::SeqCst), "only B's generation is current");
+        assert!(!(running.load(Ordering::SeqCst) && gen.load(Ordering::SeqCst) == a_gen));
+    }
 
     #[test]
     fn maps_app_config_to_engine_config() {
