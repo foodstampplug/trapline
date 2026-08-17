@@ -1,18 +1,24 @@
 <script lang="ts">
-  // Settings modal — the ⚙ rail panel for the 4 user-editable config fields
-  // (webhook URL, webhook display name, community Discord invite, shell).
-  // Ported field-for-field from main:index.html #settings / main.js
-  // openSettings()/saveSettings()/testWebhook(). Save sends only these 4
-  // fields — saveConfig (src/lib/stores/config.ts) merges them client-side
-  // over the current config before calling the backend, preserving the
-  // deck_* fields already in state (the backend's set_config also preserves
-  // them as a backstop), so there's nothing else to send here. Same
-  // modal-card shell as
+  // Settings modal — the ⚙ rail panel for user-editable config: the
+  // original 4 webhook/shell fields, plus (Phase 2) the Watch section —
+  // targets, interval/threshold/rpm, and enable + run-once controls.
+  // Webhook fields ported field-for-field from main:index.html #settings /
+  // main.js openSettings()/saveSettings()/testWebhook(). Save sends the
+  // webhook fields plus the Watch config fields (targets/interval/
+  // threshold/rpm) — NOT watchEnabled, which the enable toggle drives
+  // directly via startWatch()/stopWatch() ($lib/stores/watch) instead of
+  // the form; those persist "enabled" themselves server-side.
+  // saveConfig (src/lib/stores/config.ts) merges this patch client-side
+  // over the current config before calling the backend, preserving every
+  // other field (deck_*, watchEnabled) already in state (the backend's
+  // set_config also preserves them as a backstop). Same modal-card shell as
   // FindingsPanel.svelte/Loot.svelte/FindingEditor.svelte.
   import { untrack } from 'svelte';
   import { config, saveConfig } from '$lib/stores/config';
   import { testWebhook } from '$lib/bridge';
   import { toast } from '$lib/stores/toasts';
+  import { watch, startWatch, stopWatch, runWatchOnce } from '$lib/stores/watch';
+  import type { WatchTarget } from '$lib/types';
 
   let { open = $bindable(false) }: { open?: boolean } = $props();
 
@@ -20,6 +26,38 @@
   let username = $state('');
   let communityDiscord = $state('');
   let shell = $state('');
+
+  // Watch section local editing state. `watchEnabled` is deliberately NOT
+  // mirrored here — the enable toggle below reads `$watch.running` directly
+  // and drives startWatch()/stopWatch(), which persist "enabled" themselves
+  // server-side (preserve_deck_fields carries it across saves). Everything
+  // else here round-trips through the SAME saveConfig() call as the webhook
+  // fields — no separate save path.
+  let targets = $state<WatchTarget[]>([]);
+  let watchIntervalMin = $state(30);
+  let watchAlertThreshold = $state(50);
+  let watchMaxRpm = $state(30);
+  let watchBusy = $state(false);
+  let runningOnce = $state(false);
+
+  /** One entry per line, for textarea display. */
+  function toLines(arr: string[]): string {
+    return arr.join('\n');
+  }
+  /** Inverse of toLines — trims and drops blank lines. */
+  function fromLines(s: string): string[] {
+    return s
+      .split('\n')
+      .map((t) => t.trim())
+      .filter(Boolean);
+  }
+  function cloneTargets(ts: WatchTarget[]): WatchTarget[] {
+    return ts.map((t) => ({ name: t.name, pages: [...t.pages], js: [...t.js], inScope: [...t.inScope], autoEnrich: t.autoEnrich }));
+  }
+  /** Guards against NaN from a momentarily-cleared number input at save time. */
+  function numOr(v: number, fallback: number): number {
+    return Number.isFinite(v) ? v : fallback;
+  }
 
   // Settings is mounted once for the whole session (like Loot/FindingsPanel)
   // and only toggled via `open`, so it can't seed its local $state from a
@@ -39,6 +77,10 @@
       username = c.username;
       communityDiscord = c.communityDiscord;
       shell = c.shell;
+      targets = cloneTargets(c.watchTargets ?? []);
+      watchIntervalMin = Math.max(1, Math.round((c.watchIntervalSecs ?? 1800) / 60));
+      watchAlertThreshold = c.watchAlertThreshold ?? 50;
+      watchMaxRpm = c.watchMaxRpm ?? 30;
     });
   });
 
@@ -74,6 +116,20 @@
         username: username.trim(),
         communityDiscord: communityDiscord.trim(),
         shell,
+        // watchEnabled intentionally omitted — see comment above the
+        // Watch-section state block. saveConfig merges this patch over the
+        // current config, so leaving it out preserves whatever the
+        // scheduler last persisted there.
+        watchTargets: targets.map((t) => ({
+          name: t.name.trim(),
+          pages: t.pages,
+          js: t.js,
+          inScope: t.inScope,
+          autoEnrich: t.autoEnrich,
+        })),
+        watchIntervalSecs: Math.max(1, Math.round(numOr(watchIntervalMin, 30))) * 60,
+        watchAlertThreshold: Math.min(100, Math.max(0, Math.round(numOr(watchAlertThreshold, 50)))),
+        watchMaxRpm: Math.max(0, Math.round(numOr(watchMaxRpm, 0))),
       });
       saved = true;
       clearTimeout(savedTimer);
@@ -82,6 +138,48 @@
     } catch (e) {
       console.error(e);
     }
+  }
+
+  // Drives the scheduler directly — does NOT write config.watchEnabled from
+  // the form. startWatch()/stopWatch() (src/lib/stores/watch.ts) persist
+  // "enabled" themselves and refresh the `watch` store, which this toggle
+  // reflects via `$watch.running`.
+  async function onToggleWatch(e: Event): Promise<void> {
+    const turnOn = (e.currentTarget as HTMLInputElement).checked;
+    watchBusy = true;
+    try {
+      if (turnOn) {
+        await startWatch();
+      } else {
+        await stopWatch();
+      }
+    } catch (e2) {
+      console.error(e2);
+      toast('Watch toggle failed: ' + String(e2), 'err');
+    } finally {
+      watchBusy = false;
+    }
+  }
+
+  async function onRunOnce(): Promise<void> {
+    if (runningOnce) return;
+    runningOnce = true;
+    try {
+      await runWatchOnce();
+      toast('Watch cycle started', 'ok');
+    } catch (e) {
+      console.error(e);
+      toast('Run once failed: ' + String(e), 'err');
+    } finally {
+      runningOnce = false;
+    }
+  }
+
+  function addTarget(): void {
+    targets = [...targets, { name: '', pages: [], js: [], inScope: [], autoEnrich: false }];
+  }
+  function removeTarget(i: number): void {
+    targets = targets.filter((_, idx) => idx !== i);
   }
 
   async function sendTest(): Promise<void> {
@@ -163,6 +261,100 @@
         </select>
       </div>
 
+      <div class="sec-head">Watch <span class="lbl-note">background change-detection scheduler</span></div>
+
+      <div class="ff-col">
+        <label class="chk-row" for="watchEnabled">
+          <input
+            id="watchEnabled"
+            type="checkbox"
+            role="switch"
+            checked={$watch.running}
+            disabled={watchBusy}
+            onchange={onToggleWatch}
+          />
+          Enable Watch
+          <span class="lbl-note">({$watch.running ? 'running' : 'stopped'})</span>
+        </label>
+      </div>
+
+      <div class="ff-row">
+        <div class="ff-col">
+          <label for="watchInterval">Interval <span class="lbl-note">(minutes)</span></label>
+          <input id="watchInterval" type="number" min="1" step="1" bind:value={watchIntervalMin} />
+        </div>
+        <div class="ff-col">
+          <label for="watchThreshold">Alert threshold <span class="lbl-note">(0–100)</span></label>
+          <input id="watchThreshold" type="number" min="0" max="100" step="1" bind:value={watchAlertThreshold} />
+        </div>
+        <div class="ff-col">
+          <label for="watchRpm">Max req/min <span class="lbl-note">(0 = unthrottled)</span></label>
+          <input id="watchRpm" type="number" min="0" step="1" bind:value={watchMaxRpm} />
+        </div>
+      </div>
+
+      <div class="ff-col">
+        <button type="button" class="ghost-btn" onclick={onRunOnce} disabled={runningOnce}>
+          {runningOnce ? 'Running…' : 'Run once →'}
+        </button>
+      </div>
+
+      <div class="group-label">Targets</div>
+      {#each targets as t, i (i)}
+        <div class="target-card">
+          <div class="target-head">
+            <input
+              type="text"
+              class="target-name"
+              spellcheck="false"
+              placeholder="Target name"
+              aria-label={`Target ${i + 1} name`}
+              bind:value={t.name}
+            />
+            <button type="button" class="ghost-btn sm" onclick={() => removeTarget(i)}>Remove</button>
+          </div>
+          <div class="ff-row">
+            <div class="ff-col">
+              <label for={`watchPages${i}`}>Pages <span class="lbl-note">(one URL per line)</span></label>
+              <textarea
+                id={`watchPages${i}`}
+                rows="3"
+                spellcheck="false"
+                value={toLines(t.pages)}
+                onchange={(e) => (t.pages = fromLines((e.currentTarget as HTMLTextAreaElement).value))}
+              ></textarea>
+            </div>
+            <div class="ff-col">
+              <label for={`watchJs${i}`}>JS files <span class="lbl-note">(one URL per line)</span></label>
+              <textarea
+                id={`watchJs${i}`}
+                rows="3"
+                spellcheck="false"
+                value={toLines(t.js)}
+                onchange={(e) => (t.js = fromLines((e.currentTarget as HTMLTextAreaElement).value))}
+              ></textarea>
+            </div>
+            <div class="ff-col">
+              <label for={`watchScope${i}`}>In-scope hosts <span class="lbl-note">(one host per line)</span></label>
+              <textarea
+                id={`watchScope${i}`}
+                rows="3"
+                spellcheck="false"
+                value={toLines(t.inScope)}
+                onchange={(e) => (t.inScope = fromLines((e.currentTarget as HTMLTextAreaElement).value))}
+              ></textarea>
+            </div>
+          </div>
+          <label class="chk-row">
+            <input type="checkbox" bind:checked={t.autoEnrich} />
+            Auto-enrich new findings
+          </label>
+        </div>
+      {/each}
+      <div class="ff-col">
+        <button type="button" class="ghost-btn" onclick={addTarget}>+ Add target</button>
+      </div>
+
       <div class="modal-actions">
         <button type="button" class="ghost-btn" onclick={sendTest} disabled={!canTest || testing}>
           {testResult === 'ok' ? 'Sent ✓' : testResult === 'err' ? 'Failed ✕' : testing ? 'Sending…' : 'Send test →'}
@@ -202,7 +394,10 @@
   .modal-card {
     position: relative;
     z-index: 1;
-    width: min(92vw, 460px);
+    /* Wider than the original 460px webhook-only card — the Watch section's
+       3-up target rows (pages/js/inScope) need the room. Same min(92vw, …)
+       pattern as FindingEditor.svelte's finding-card (800px there). */
+    width: min(92vw, 640px);
     max-height: 90vh;
     overflow-y: auto;
     background: var(--card-glass);
@@ -259,7 +454,8 @@
     font-weight: 400;
   }
   .ff-col input,
-  .ff-col select {
+  .ff-col select,
+  .ff-col textarea {
     width: 100%;
     background: var(--input-bg);
     border: var(--bordw) solid var(--edge2);
@@ -271,7 +467,8 @@
     transition: border-color 0.15s, box-shadow 0.15s;
   }
   .ff-col input:focus,
-  .ff-col select:focus {
+  .ff-col select:focus,
+  .ff-col textarea:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px var(--glowa);
   }
@@ -280,6 +477,88 @@
   }
   .ff-col select option {
     background: var(--bg);
+  }
+  .ff-col textarea {
+    resize: vertical;
+    line-height: 1.55;
+    font-family: var(--fmono);
+    font-size: 12px;
+  }
+
+  /* Multi-column field rows — same shape as FindingEditor.svelte's .ff-row,
+     used here for the Watch section's interval/threshold/rpm and the
+     per-target pages/js/inScope textareas. */
+  .ff-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .ff-row .ff-col {
+    flex: 1;
+    min-width: 150px;
+  }
+
+  .sec-head {
+    font: 700 11px/1 var(--fui);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 4px 0 14px;
+    padding-top: 14px;
+    border-top: var(--bordw) solid var(--edge);
+  }
+  .group-label {
+    font: 700 11px/1 var(--fui);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+  .chk-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font: 500 12.5px/1.4 var(--fui);
+    color: var(--ink);
+    cursor: pointer;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .chk-row input[type='checkbox'] {
+    width: auto;
+    cursor: pointer;
+  }
+  .target-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: var(--bordw) solid var(--edge);
+    border-radius: calc(var(--radius) - 4px);
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+  .target-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .target-name {
+    flex: 1;
+    min-width: 0;
+    background: var(--input-bg);
+    border: var(--bordw) solid var(--edge2);
+    border-radius: calc(var(--radius) - 6px);
+    color: var(--ink);
+    padding: 9px 11px;
+    outline: none;
+    font: 600 13px/1.4 var(--fui);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .target-name:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--glowa);
   }
 
   .modal-actions {
@@ -314,6 +593,11 @@
   .ghost-btn:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+  }
+  .ghost-btn.sm {
+    padding: 7px 10px;
+    font-size: 12px;
+    flex-shrink: 0;
   }
   .run-btn {
     font: 700 13px/1 var(--fdisp);

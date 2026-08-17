@@ -7,7 +7,22 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/svelte';
 vi.mock('$lib/stores/config', async () => {
   const { writable } = await import('svelte/store');
   return {
-    config: writable({ webhookUrl: 'wh', username: 'Trapline', communityDiscord: '', shell: '' }),
+    config: writable({
+      webhookUrl: 'wh',
+      username: 'Trapline',
+      communityDiscord: '',
+      shell: '',
+      deckPath: '',
+      deckPort: 8787,
+      deckToken: '',
+      watchTargets: [
+        { name: 'acme', pages: ['https://acme.com'], js: [], inScope: ['acme.com'], autoEnrich: false },
+      ],
+      watchIntervalSecs: 1800,
+      watchAlertThreshold: 50,
+      watchMaxRpm: 30,
+      watchEnabled: false,
+    }),
     saveConfig: vi.fn(),
   };
 });
@@ -16,9 +31,23 @@ vi.mock('$lib/bridge', () => ({
   testWebhook: vi.fn(),
 }));
 
+// Same isolation pattern as RightDock.test.ts — mock the whole watch store
+// module so the component's `startWatch`/`stopWatch`/`runWatchOnce` calls
+// are observable without touching the real Tauri bridge or event listeners.
+vi.mock('$lib/stores/watch', async () => {
+  const { writable } = await import('svelte/store');
+  return {
+    watch: writable({ running: false, targets: 1, intervalSecs: 1800, lastRunMs: 0, lastAssets: 0, lastNew: 0 }),
+    startWatch: vi.fn(),
+    stopWatch: vi.fn(),
+    runWatchOnce: vi.fn(),
+  };
+});
+
 import Settings from './Settings.svelte';
 import { saveConfig } from '$lib/stores/config';
 import { testWebhook } from '$lib/bridge';
+import { startWatch } from '$lib/stores/watch';
 
 // This project's vite.config.ts doesn't set `test.globals`, so
 // @testing-library/svelte's built-in auto-cleanup never registers — every
@@ -62,5 +91,36 @@ describe('Settings', () => {
 
     const testBtn = screen.getByRole('button', { name: /send test/i }) as HTMLButtonElement;
     expect(testBtn.disabled).toBe(true);
+  });
+});
+
+describe('Settings — Watch section', () => {
+  it('renders the Watch section with interval + a seeded target editable', () => {
+    render(Settings, { props: { open: true } });
+
+    // 1800s from the seeded config, shown in MINUTES per the Global
+    // Constraints (interval is edited in minutes, not raw seconds).
+    const intervalInput = screen.getByLabelText(/interval/i) as HTMLInputElement;
+    expect(intervalInput.value).toBe('30');
+
+    const targetName = screen.getByDisplayValue('acme') as HTMLInputElement;
+    expect(targetName).toBeTruthy();
+  });
+
+  it('a seeded target name field is editable', async () => {
+    render(Settings, { props: { open: true } });
+    const targetName = screen.getByDisplayValue('acme') as HTMLInputElement;
+    await fireEvent.input(targetName, { target: { value: 'acme-corp' } });
+    expect(targetName.value).toBe('acme-corp');
+  });
+
+  it('the enable toggle calls startWatch when turned on', async () => {
+    render(Settings, { props: { open: true } });
+    const toggle = screen.getByLabelText(/enable watch/i) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+
+    await fireEvent.click(toggle);
+
+    expect(startWatch).toHaveBeenCalledTimes(1);
   });
 });
