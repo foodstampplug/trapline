@@ -99,3 +99,50 @@ pub async fn send_embed(
         Err(format!("Discord returned {}: {}", status, body))
     }
 }
+
+/// Post a watch alert (content + rich embed array) to a Discord webhook using a
+/// BLOCKING client — called from the Watch scheduler thread, not the async
+/// runtime. No-op when the webhook is empty.
+pub fn send_watch_alert(
+    webhook_url: &str,
+    username: &str,
+    content: &str,
+    embeds: serde_json::Value,
+) -> Result<(), String> {
+    if webhook_url.trim().is_empty() {
+        return Ok(());
+    }
+    let payload = serde_json::json!({
+        "username": username,
+        "content": content,
+        "embeds": embeds,
+    });
+    let client = reqwest::blocking::Client::builder()
+        .timeout(TIMEOUT)
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client
+        .post(webhook_url)
+        .json(&payload)
+        .send()
+        .map_err(|e| e.to_string())?;
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        Err(format!("Discord returned {}: {}", status, body))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn send_watch_alert_noop_on_empty_webhook() {
+        // Empty webhook must short-circuit to Ok without any network call.
+        let r = send_watch_alert("", "Trapline", "hi", serde_json::json!([]));
+        assert!(r.is_ok());
+    }
+}

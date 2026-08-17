@@ -7,5 +7,6 @@ pub mod fetch;
 pub mod normalize;
 pub mod parse;
 pub mod score;
+pub mod sink;
 pub mod sourcemap;
 pub mod store;
