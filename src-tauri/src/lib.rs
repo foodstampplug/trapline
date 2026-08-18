@@ -4,6 +4,7 @@ mod deck;
 mod discord;
 mod findings;
 mod flags;
+mod integrations;
 mod runner;
 mod session;
 mod watch;
