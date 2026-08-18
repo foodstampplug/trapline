@@ -22,6 +22,8 @@ vi.mock('$lib/stores/config', async () => {
       watchAlertThreshold: 50,
       watchMaxRpm: 30,
       watchEnabled: false,
+      shodanApiKey: 'SHODAN_TEST_KEY',
+      leakcheckApiKey: 'LEAKCHECK_TEST_KEY',
     }),
     saveConfig: vi.fn(),
   };
@@ -122,5 +124,49 @@ describe('Settings — Watch section', () => {
     await fireEvent.click(toggle);
 
     expect(startWatch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Settings — Integrations section', () => {
+  it('renders two masked (type="password") key inputs seeded from config', () => {
+    render(Settings, { props: { open: true } });
+
+    const shodanInput = screen.getByLabelText(/shodan/i) as HTMLInputElement;
+    const leakcheckInput = screen.getByLabelText(/leakcheck/i) as HTMLInputElement;
+
+    expect(shodanInput.type).toBe('password');
+    expect(shodanInput.value).toBe('SHODAN_TEST_KEY');
+    expect(leakcheckInput.type).toBe('password');
+    expect(leakcheckInput.value).toBe('LEAKCHECK_TEST_KEY');
+  });
+
+  it('the reveal toggle flips the Shodan key input to type="text"', async () => {
+    render(Settings, { props: { open: true } });
+
+    const shodanInput = screen.getByLabelText(/shodan/i) as HTMLInputElement;
+    expect(shodanInput.type).toBe('password');
+
+    const revealBtn = screen.getByRole('button', { name: /reveal/i });
+    await fireEvent.click(revealBtn);
+
+    expect(shodanInput.type).toBe('text');
+  });
+
+  it('saving includes the key fields in the saveConfig payload', async () => {
+    render(Settings, { props: { open: true } });
+
+    // Earlier tests in this file also click Save, and this file's mocks
+    // aren't cleared between tests (no `test.globals`/clearMocks in
+    // vite.config.ts — same reason FindingEditor.test.ts/Loot.test.ts call
+    // out explicit cleanup elsewhere) — so assert on the LAST call rather
+    // than an absolute call count.
+    const saveBtn = screen.getByRole('button', { name: /^save$/i });
+    await fireEvent.click(saveBtn);
+
+    const patch = vi.mocked(saveConfig).mock.calls.at(-1)?.[0];
+    expect(patch).toMatchObject({
+      shodanApiKey: 'SHODAN_TEST_KEY',
+      leakcheckApiKey: 'LEAKCHECK_TEST_KEY',
+    });
   });
 });

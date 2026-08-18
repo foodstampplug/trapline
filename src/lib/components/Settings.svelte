@@ -27,6 +27,15 @@
   let communityDiscord = $state('');
   let shell = $state('');
 
+  // Integrations section — Shodan / LeakCheck API keys. Masked by default
+  // (type="password"); one shared reveal toggle flips both, kept simple per
+  // the brief ("per-field or one shared — your call"). Rides the SAME
+  // saveConfig() call as the webhook/Watch fields below — no separate save
+  // path — and is never logged or echoed to a toast.
+  let shodanApiKey = $state('');
+  let leakcheckApiKey = $state('');
+  let revealKeys = $state(false);
+
   // Watch section local editing state. `watchEnabled` is deliberately NOT
   // mirrored here — the enable toggle below reads `$watch.running` directly
   // and drives startWatch()/stopWatch(), which persist "enabled" themselves
@@ -77,6 +86,8 @@
       username = c.username;
       communityDiscord = c.communityDiscord;
       shell = c.shell;
+      shodanApiKey = c.shodanApiKey ?? '';
+      leakcheckApiKey = c.leakcheckApiKey ?? '';
       targets = cloneTargets(c.watchTargets ?? []);
       watchIntervalMin = Math.max(1, Math.round((c.watchIntervalSecs ?? 1800) / 60));
       watchAlertThreshold = c.watchAlertThreshold ?? 50;
@@ -116,6 +127,8 @@
         username: username.trim(),
         communityDiscord: communityDiscord.trim(),
         shell,
+        shodanApiKey: shodanApiKey.trim(),
+        leakcheckApiKey: leakcheckApiKey.trim(),
         // watchEnabled intentionally omitted — see comment above the
         // Watch-section state block. saveConfig merges this patch over the
         // current config, so leaving it out preserves whatever the
@@ -259,6 +272,44 @@
             <option value={s.value}>{s.label}</option>
           {/each}
         </select>
+      </div>
+
+      <div class="sec-head">Integrations <span class="lbl-note">Shodan / LeakCheck API keys, used by enrichment</span></div>
+
+      <div class="ff-col">
+        <label for="setShodanKey">Shodan API key</label>
+        <input
+          id="setShodanKey"
+          type={revealKeys ? 'text' : 'password'}
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="Shodan API key"
+          bind:value={shodanApiKey}
+        />
+      </div>
+
+      <div class="ff-col">
+        <label for="setLeakcheckKey">LeakCheck API key</label>
+        <input
+          id="setLeakcheckKey"
+          type={revealKeys ? 'text' : 'password'}
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="LeakCheck API key"
+          bind:value={leakcheckApiKey}
+        />
+      </div>
+
+      <div class="ff-col">
+        <button
+          type="button"
+          class="ghost-btn sm"
+          title={revealKeys ? 'Hide keys' : 'Reveal keys'}
+          onclick={() => (revealKeys = !revealKeys)}
+        >
+          {revealKeys ? '🙈 Hide keys' : '👁 Reveal keys'}
+        </button>
+        <span class="lbl-note key-note">Keys are stored locally and sent only to Shodan / LeakCheck.</span>
       </div>
 
       <div class="sec-head">Watch <span class="lbl-note">background change-detection scheduler</span></div>
@@ -598,6 +649,13 @@
     padding: 7px 10px;
     font-size: 12px;
     flex-shrink: 0;
+  }
+  /* Reveal-keys note sits directly under its toggle button, not inline in a
+     label like the other .lbl-note usages — same token/color, just given
+     its own line. */
+  .key-note {
+    display: block;
+    margin-top: 6px;
   }
   .run-btn {
     font: 700 13px/1 var(--fdisp);
