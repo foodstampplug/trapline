@@ -57,6 +57,12 @@ pub struct Config {
     /// Not a Settings-form field — preserved across Settings saves.
     #[serde(default)]
     pub watch_enabled: bool,
+    /// Shodan API key (Settings, masked). Sent only backend→api.shodan.io.
+    #[serde(default)]
+    pub shodan_api_key: String,
+    /// LeakCheck API key (Settings, masked). Sent only backend→leakcheck.io.
+    #[serde(default)]
+    pub leakcheck_api_key: String,
 }
 
 fn default_username() -> String {
@@ -94,6 +100,8 @@ impl Default for Config {
             watch_alert_threshold: 50,
             watch_max_rpm: 30,
             watch_enabled: false,
+            shodan_api_key: String::new(),
+            leakcheck_api_key: String::new(),
         }
     }
 }
@@ -233,5 +241,26 @@ mod tests {
         let merged = preserve_deck_fields(incoming, &current);
         assert!(merged.watch_enabled, "runtime watch_enabled must survive a Settings save");
         assert_eq!(merged.webhook_url, "wh");
+    }
+
+    #[test]
+    fn old_config_json_loads_without_integration_keys() {
+        let old = r#"{"webhookUrl":"","username":"Trapline"}"#;
+        let cfg: Config = serde_json::from_str(old).expect("old config must still parse");
+        assert_eq!(cfg.shodan_api_key, "");
+        assert_eq!(cfg.leakcheck_api_key, "");
+    }
+
+    #[test]
+    fn integration_keys_round_trip_camelcase() {
+        let mut c = Config::default();
+        c.shodan_api_key = "SKEY".into();
+        c.leakcheck_api_key = "LKEY".into();
+        let j = serde_json::to_string(&c).unwrap();
+        assert!(j.contains("\"shodanApiKey\""), "expected camelCase, got {j}");
+        assert!(j.contains("\"leakcheckApiKey\""));
+        let back: Config = serde_json::from_str(&j).unwrap();
+        assert_eq!(back.shodan_api_key, "SKEY");
+        assert_eq!(back.leakcheck_api_key, "LKEY");
     }
 }
