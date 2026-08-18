@@ -7,10 +7,11 @@
   //
   // Everything below renders via plain Svelte text bindings — never
   // {@html}/innerHTML — since Shodan/LeakCheck values are untrusted, remote
-  // strings (org names, hostnames, breach source names, etc). LeakResult
-  // carries no plaintext password anywhere in its type (see LeakRow in
-  // $lib/types.ts — just usernamePresent/passwordPresent booleans); this
-  // card must keep it that way and only ever show a redacted aggregate count.
+  // strings (org names, hostnames, breach source names, emails, etc). The
+  // LeakCheck card shows the real per-row intel (email · username · source ·
+  // date), but the plaintext PASSWORD is never in LeakResult's type (LeakRow
+  // in $lib/types.ts carries only `passwordPresent: boolean` — see
+  // leakcheck.rs) so it can't be rendered; a 🔒 marks a row where one leaked.
   import type { IntegrationCardData } from '$lib/data/integrations';
 
   let {
@@ -32,9 +33,6 @@
 
   const passwordCount = $derived(
     card.kind === 'leak' ? card.data.results.filter((r) => r.passwordPresent).length : 0
-  );
-  const usernameCount = $derived(
-    card.kind === 'leak' ? card.data.results.filter((r) => r.usernamePresent).length : 0
   );
 
   function close(): void {
@@ -160,6 +158,9 @@
       {:else if card.kind === 'leak'}
         <div class="row2">
           <div class="kv"><span class="k">Found</span><span class="v mono">{card.data.found}</span></div>
+          {#if passwordCount > 0}
+            <div class="kv"><span class="k">Passwords</span><span class="v">🔒 {passwordCount} exposed</span></div>
+          {/if}
         </div>
         <div class="section">
           <div class="sh">Sources <span class="c">{card.data.sources.length}</span></div>
@@ -174,14 +175,23 @@
           {/if}
         </div>
         <div class="section">
-          <div class="sh">Redacted summary</div>
-          <div class="redacted">
-            <div>{card.data.found} found</div>
-            <div>{card.data.sources.length} source{card.data.sources.length === 1 ? '' : 's'}</div>
-            <div>{passwordCount} row{passwordCount === 1 ? '' : 's'} with password present</div>
-            <div>{usernameCount} row{usernameCount === 1 ? '' : 's'} with username present</div>
-          </div>
+          <div class="sh">Results <span class="c">{card.data.results.length}</span></div>
+          {#if card.data.results.length === 0}
+            <div class="none">no rows</div>
+          {:else}
+            <div class="list">
+              {#each card.data.results as r, i (r.email + '|' + r.source + '|' + i)}
+                <div class="li leakrow">
+                  <span class="v mono">{r.email || '—'}</span>
+                  {#if r.username}<span class="tag user">{r.username}</span>{/if}
+                  <span class="dim">{r.source}{r.date ? ' · ' + r.date : ''}</span>
+                  {#if r.passwordPresent}<span class="pw" title="password present — value withheld by design">🔒</span>{/if}
+                </div>
+              {/each}
+            </div>
+          {/if}
         </div>
+        <div class="note">Plaintext passwords are withheld by design — 🔒 marks a row where one was exposed.</div>
       {/if}
     </div>
   </div>
@@ -378,15 +388,20 @@
     font-family: var(--fmono);
   }
 
-  .redacted {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid var(--edge);
-    border-radius: calc(var(--radius) - 6px);
-    padding: 10px 12px;
-    font: 600 11.5px/1.5 var(--fui);
-    color: var(--muted);
+  .li.leakrow {
+    flex-wrap: wrap;
+  }
+  .li .tag.user {
+    color: var(--accent2);
+    border-color: color-mix(in srgb, var(--accent2) 40%, transparent);
+  }
+  .pw {
+    margin-left: auto;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .note {
+    font: 500 10.5px/1.5 var(--fui);
+    color: var(--dim);
   }
 </style>

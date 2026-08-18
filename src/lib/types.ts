@@ -156,9 +156,10 @@ export interface LeakSource {
 
 export interface LeakRow {
   email: string;
-  usernamePresent: boolean;
+  username: string;
   passwordPresent: boolean;
   source: string;
+  date: string;
 }
 
 export interface LeakResult {

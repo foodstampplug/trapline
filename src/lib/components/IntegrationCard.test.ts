@@ -32,29 +32,28 @@ describe('IntegrationCard', () => {
     expect(screen.getByText('CVE-2021-41773')).toBeInTheDocument();
   });
 
-  it('renders a LeakCheck result: found count + a source + a redacted summary, never a plaintext password', () => {
+  it('renders LeakCheck per-row intel (email, username, source) but never a plaintext password', () => {
     const data: LeakResult = {
       found: 3,
       sources: [{ name: 'BreachCo 2019', date: '2019-06-01' }],
       results: [
-        { email: 'user@acme.com', usernamePresent: true, passwordPresent: true, source: 'BreachCo 2019' },
-        { email: 'user@acme.com', usernamePresent: false, passwordPresent: false, source: 'OtherLeak' },
-        { email: 'user@acme.com', usernamePresent: true, passwordPresent: true, source: 'BreachCo 2019' },
+        { email: 'neo@acme.com', username: 'neo', passwordPresent: true, source: 'BreachCo 2019', date: '2019-06-01' },
+        { email: 'trin@acme.com', username: '', passwordPresent: false, source: 'OtherLeak', date: '' },
       ],
     };
 
-    render(IntegrationCard, { props: { card: { kind: 'leak', data }, arg: 'user@acme.com' } });
+    render(IntegrationCard, { props: { card: { kind: 'leak', data }, arg: 'acme.com' } });
 
-    expect(screen.getByText('3')).toBeInTheDocument();
-    expect(screen.getByText('BreachCo 2019')).toBeInTheDocument();
-    expect(screen.getByText(/2 rows? with password present/i)).toBeInTheDocument();
+    // Real per-row intel is shown now, not just aggregate counts:
+    expect(screen.getByText('neo@acme.com')).toBeInTheDocument();
+    expect(screen.getByText('trin@acme.com')).toBeInTheDocument();
+    expect(screen.getByText('neo')).toBeInTheDocument(); // the actual username value
+    expect(screen.getByText(/1 exposed/)).toBeInTheDocument(); // password-present surfaced as a count, not the value
 
-    // No raw password field or value should ever render — LeakResult carries
-    // no plaintext password anywhere in its type, and this must stay a
-    // redacted aggregate (count only), never a per-row dump.
+    // The plaintext password value must NEVER render — LeakRow carries only
+    // `passwordPresent: boolean`, and the card shows a 🔒 marker only.
     expect(screen.queryByText(/password123|hunter2/i)).not.toBeInTheDocument();
     const html = document.body.innerHTML.toLowerCase();
     expect(html).not.toContain('"password"');
-    expect(html).not.toContain('passwordpresent');
   });
 });

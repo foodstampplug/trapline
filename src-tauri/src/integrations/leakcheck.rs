@@ -28,9 +28,15 @@ pub struct LeakSource {
 #[serde(rename_all = "camelCase")]
 pub struct LeakRow {
     pub email: String,
-    pub username_present: bool,
+    /// The breached username (actual value — surfaced so the card shows real
+    /// intel, not a count). Empty when the row has none.
+    pub username: String,
+    /// Whether a password was in this breach row. The plaintext value is NEVER
+    /// stored/serialized — only this flag survives `parse`.
     pub password_present: bool,
     pub source: String,
+    /// Per-row breach date (from `source.breach_date`), empty when unknown.
+    pub date: String,
 }
 
 #[derive(Serialize, Debug, Default)]
@@ -91,9 +97,10 @@ pub fn parse(body: &str) -> LeakResult {
         }
         results.push(LeakRow {
             email: row.email,
-            username_present: !row.username.is_empty(),
+            username: row.username,
             password_present: !row.password.is_empty(),
             source: row.source.name,
+            date: row.source.breach_date,
         });
     }
 
@@ -214,9 +221,10 @@ mod tests {
             found: 1,
             results: vec![LeakRow {
                 email: "a@b.test".into(),
-                username_present: false,
+                username: String::new(),
                 password_present: true,
                 source: "BreachX".into(),
+                date: String::new(),
             }],
             ..Default::default()
         };
@@ -239,6 +247,25 @@ mod tests {
         assert!(err.contains("LeakCheck API key not set"));
         let err = rt.block_on(query("   ", "acme.com", "domain")).unwrap_err();
         assert!(err.contains("LeakCheck API key not set"));
+    }
+
+    #[test]
+    fn parse_retains_email_username_source_date_but_not_password() {
+        // The card needs real intel per row: email, username, source, date —
+        // but the plaintext password must STILL never survive parse.
+        let sample = r#"{"found":1,"result":[
+          {"email":"a@b.test","username":"neo","password":"hunter2","source":{"name":"BreachX","breach_date":"2020-01"}}
+        ]}"#;
+        let r = parse(sample);
+        let row = &r.results[0];
+        assert_eq!(row.email, "a@b.test");
+        assert_eq!(row.username, "neo"); // actual value now, not a bool
+        assert!(row.password_present); // flagged...
+        assert_eq!(row.source, "BreachX");
+        assert_eq!(row.date, "2020-01");
+        let j = serde_json::to_string(&r).unwrap();
+        assert!(j.contains("neo"), "username data must be shown");
+        assert!(!j.contains("hunter2"), "plaintext password must never be serialized");
     }
 
     #[test]
