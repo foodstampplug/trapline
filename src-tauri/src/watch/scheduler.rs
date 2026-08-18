@@ -1,3 +1,4 @@
+use crate::integrations::{leakcheck, shodan};
 use crate::AppState;
 use once_cell::sync::Lazy;
 use serde::Serialize;
@@ -9,6 +10,11 @@ use tauri::{AppHandle, Emitter, Manager};
 use super::engine;
 use super::fetch::Fetcher;
 use super::store::Store;
+
+/// Short gap between enrichment lookups (Shodan/LeakCheck) — a courteous
+/// throttle, not a hard rate limiter (the HTTP clients don't rate-limit
+/// themselves the way `Fetcher` does for target JS).
+const ENRICH_GAP: Duration = Duration::from_millis(300);
 
 /// The scheduler is a single background thread; this flag is its run gate.
 static WATCH_RUNNING: AtomicBool = AtomicBool::new(false);
@@ -88,7 +94,21 @@ fn run_cycle(app: &AppHandle) {
         Ok(f) => f,
         Err(e) => { eprintln!("[watch] fetcher init failed: {e}"); return; }
     };
-    match engine::run_once(&cfg, &store, &fetcher) {
+
+    // Auto-enrich only changes anything when at least one *current* watch
+    // target has it on — otherwise this is exactly the Phase-2 `run_once`
+    // path, byte-identical.
+    let any_auto_enrich = app_cfg.watch_targets.iter().any(|t| t.auto_enrich);
+    let run_result = if any_auto_enrich {
+        let mut harvests: Vec<engine::TargetHarvest> = Vec::new();
+        let n = engine::run_once_harvest(&cfg, &store, &fetcher, &mut harvests);
+        run_enrich_pass(app, &app_cfg, &store, &harvests);
+        n
+    } else {
+        engine::run_once(&cfg, &store, &fetcher)
+    };
+
+    match run_result {
         Ok(n) => {
             let assets: i64 = cfg
                 .targets
@@ -107,6 +127,103 @@ fn run_cycle(app: &AppHandle) {
             }
         }
         Err(e) => eprintln!("[watch] cycle error: {e}"),
+    }
+}
+
+/// For each harvested target whose *current* app watch-target has
+/// `auto_enrich` on: query Shodan for every newly-harvested host and
+/// LeakCheck for every newly-harvested email, deduped forever via
+/// `Store::enrichment_seen` (the quota guard — `enrichment_seen` is called
+/// FIRST and only a fresh value goes on to a network query). A blank API key
+/// skips its whole loop up front (including the `enrichment_seen` call) so a
+/// missing key never permanently burns the dedup guard, and a missing/failed
+/// key doesn't spin. A failed lookup is logged without the key or the
+/// looked-up value (target name + host is fine — it's already-public
+/// attack-surface data the engine harvested off the target's own JS; emails
+/// specifically are never logged) and skipped, never fatal.
+fn run_enrich_pass(app: &AppHandle, app_cfg: &AppConfig, store: &Store, harvests: &[engine::TargetHarvest]) {
+    let shodan_key = app_cfg.shodan_api_key.trim().to_string();
+    let leakcheck_key = app_cfg.leakcheck_api_key.trim().to_string();
+
+    let enrich_targets: std::collections::HashSet<&str> = app_cfg
+        .watch_targets
+        .iter()
+        .filter(|t| t.auto_enrich)
+        .map(|t| t.name.as_str())
+        .collect();
+
+    for h in harvests {
+        if !enrich_targets.contains(h.target.as_str()) {
+            continue;
+        }
+
+        if !shodan_key.is_empty() {
+            for host in &h.hosts {
+                let is_new = match store.enrichment_seen(&h.target, "host", host) {
+                    Ok(v) => v,
+                    Err(e) => { eprintln!("[watch] enrichment_seen(host) failed: {e}"); continue; }
+                };
+                if !is_new {
+                    continue;
+                }
+                let is_ip = host.parse::<std::net::IpAddr>().is_ok();
+                let lookup = if is_ip {
+                    tauri::async_runtime::block_on(shodan::host(&shodan_key, host)).map(|r| {
+                        let result_json = serde_json::to_string(&r).unwrap_or_default();
+                        (r.ports, r.cves, r.org, result_json)
+                    })
+                } else {
+                    tauri::async_runtime::block_on(shodan::domain(&shodan_key, host)).map(|r| {
+                        let result_json = serde_json::to_string(&r).unwrap_or_default();
+                        (Vec::new(), Vec::new(), String::new(), result_json)
+                    })
+                };
+                std::thread::sleep(ENRICH_GAP);
+                let (ports, cves, org, result_json) = match lookup {
+                    Ok(v) => v,
+                    Err(_) => { eprintln!("[watch] shodan lookup failed for target {}", h.target); continue; }
+                };
+                if let Err(e) = store.save_enrichment(&h.target, "host", host, &result_json) {
+                    eprintln!("[watch] save_enrichment(host) failed: {e}");
+                }
+                let _ = app.emit(
+                    "enrich:host",
+                    serde_json::json!({
+                        "target": h.target,
+                        "host": host,
+                        "ports": ports,
+                        "cves": cves,
+                        "org": org,
+                    }),
+                );
+            }
+        }
+
+        if !leakcheck_key.is_empty() {
+            for email in &h.emails {
+                let is_new = match store.enrichment_seen(&h.target, "email", email) {
+                    Ok(v) => v,
+                    Err(e) => { eprintln!("[watch] enrichment_seen(email) failed: {e}"); continue; }
+                };
+                if !is_new {
+                    continue;
+                }
+                let result = tauri::async_runtime::block_on(leakcheck::query(&leakcheck_key, email, "email"));
+                std::thread::sleep(ENRICH_GAP);
+                match result {
+                    Ok(r) => {
+                        if let Err(e) = leakcheck::record_findings(&h.target, email, &r) {
+                            eprintln!("[watch] leakcheck record_findings failed: {e}");
+                        }
+                        let result_json = serde_json::to_string(&r).unwrap_or_default();
+                        if let Err(e) = store.save_enrichment(&h.target, "email", email, &result_json) {
+                            eprintln!("[watch] save_enrichment(email) failed: {e}");
+                        }
+                    }
+                    Err(_) => eprintln!("[watch] leakcheck lookup failed for target {}", h.target),
+                }
+            }
+        }
     }
 }
 

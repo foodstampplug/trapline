@@ -1,5 +1,7 @@
 use anyhow::Result;
 use chrono::Utc;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use scraper::{Html, Selector};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -15,6 +17,52 @@ fn sha256_hex(s: &str) -> String {
     let mut h = Sha256::new();
     h.update(s.as_bytes());
     h.finalize().iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+// ── Phase-3 auto-enrich: opt-in harvest helpers ──────────────────────────────
+// Pure, read-only extraction over values the cycle already computed (new
+// Endpoint/Route artifact values) or already downloaded (unit content). None
+// of this changes what gets fetched, diffed, scored, or recorded above.
+
+static EMAIL_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}").unwrap());
+
+/// Extract the host from a URL-shaped artifact value. Values with no
+/// parseable host (relative routes, garbage strings) → `None`.
+pub fn host_of(v: &str) -> Option<String> {
+    Url::parse(v).ok().and_then(|u| u.host_str().map(|h| h.to_string()))
+}
+
+/// Pull every email address out of a chunk of text, deduped (order-preserving,
+/// first occurrence wins).
+pub fn harvest_emails(content: &str) -> Vec<String> {
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut out = Vec::new();
+    for m in EMAIL_RE.find_iter(content) {
+        let e = m.as_str().to_string();
+        if seen.insert(e.clone()) {
+            out.push(e);
+        }
+    }
+    out
+}
+
+/// Push `item` onto `v` only if not already present — keeps a `TargetHarvest`
+/// deduped across the multiple bundles/units folded into it per cycle.
+fn push_dedup(v: &mut Vec<String>, item: String) {
+    if !v.contains(&item) {
+        v.push(item);
+    }
+}
+
+/// One target's opt-in harvest for a cycle: hosts pulled from new
+/// Endpoint/Route artifacts, and emails pulled from unit content. Only
+/// populated when `run_target` is given `Some(&mut TargetHarvest)`.
+#[derive(Debug, Default, Clone)]
+pub struct TargetHarvest {
+    pub target: String,
+    pub hosts: Vec<String>,
+    pub emails: Vec<String>,
 }
 
 /// Safety gate. With an empty scope list we allow everything (and warn at load),
@@ -59,7 +107,7 @@ fn discover_js(fetcher: &Fetcher, page_url: &str) -> Result<Vec<String>> {
 pub fn run_once(cfg: &Config, store: &Store, fetcher: &Fetcher) -> Result<usize> {
     let mut total = 0;
     for target in &cfg.targets {
-        match run_target(cfg, store, fetcher, target) {
+        match run_target(cfg, store, fetcher, target, None) {
             Ok(n) => total += n,
             Err(e) => eprintln!("[{}] target error: {e}", target.name),
         }
@@ -67,7 +115,36 @@ pub fn run_once(cfg: &Config, store: &Store, fetcher: &Fetcher) -> Result<usize>
     Ok(total)
 }
 
-fn run_target(cfg: &Config, store: &Store, fetcher: &Fetcher, target: &Target) -> Result<usize> {
+/// Same cycle as `run_once`, plus an opt-in per-target harvest (hosts +
+/// emails) for the scheduler's auto-enrich pass. `out` collects one
+/// `TargetHarvest` per target that actually yielded hosts/emails this cycle.
+pub fn run_once_harvest(
+    cfg: &Config,
+    store: &Store,
+    fetcher: &Fetcher,
+    out: &mut Vec<TargetHarvest>,
+) -> Result<usize> {
+    let mut total = 0;
+    for target in &cfg.targets {
+        let mut h = TargetHarvest { target: target.name.clone(), hosts: Vec::new(), emails: Vec::new() };
+        match run_target(cfg, store, fetcher, target, Some(&mut h)) {
+            Ok(n) => total += n,
+            Err(e) => eprintln!("[{}] target error: {e}", target.name),
+        }
+        if !h.hosts.is_empty() || !h.emails.is_empty() {
+            out.push(h);
+        }
+    }
+    Ok(total)
+}
+
+fn run_target(
+    cfg: &Config,
+    store: &Store,
+    fetcher: &Fetcher,
+    target: &Target,
+    mut harvest: Option<&mut TargetHarvest>,
+) -> Result<usize> {
     // First run for this target? Then we only record a baseline and never alert,
     // so the initial flood of "every artifact is new" is silenced.
     let baseline = store.asset_count(&target.name)? == 0;
@@ -137,6 +214,13 @@ fn run_target(cfg: &Config, store: &Store, fetcher: &Fetcher, target: &Target) -
                     continue; // this source file is unchanged
                 }
             }
+            // Opt-in harvest: read the content this cycle already downloaded.
+            // Does not affect what gets diffed/extracted/scored below.
+            if let Some(h) = harvest.as_deref_mut() {
+                for e in harvest_emails(&content) {
+                    push_dedup(&mut h.emails, e);
+                }
+            }
             let consider_new = prior_unit.is_some() || !baseline;
             let mut unit_new = false;
             for a in parse::extract(&content) {
@@ -167,6 +251,20 @@ fn run_target(cfg: &Config, store: &Store, fetcher: &Fetcher, target: &Target) -
                     target.name,
                     changed.join(", ")
                 );
+            }
+        }
+    }
+
+    // Opt-in harvest: read hosts out of the new Endpoint/Route artifacts the
+    // cycle already computed above. Runs regardless of whether these
+    // artifacts clear the alert threshold below — the harvest is a separate
+    // read, not part of the alert path.
+    if let Some(h) = harvest.as_deref_mut() {
+        for a in &new_artifacts {
+            if matches!(a.kind, Kind::Endpoint | Kind::Route) {
+                if let Some(host) = host_of(&a.value) {
+                    push_dedup(&mut h.hosts, host);
+                }
             }
         }
     }
@@ -347,4 +445,22 @@ fn build_embed(
         embed["url"] = serde_json::Value::String(source_url.to_string());
     }
     serde_json::json!([embed])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn extract_host_from_url_artifact() {
+        assert_eq!(host_of("https://api.acme.com/v2/x"), Some("api.acme.com".to_string()));
+        assert_eq!(host_of("/relative/path"), None);      // routes without a host → None
+        assert_eq!(host_of("not a url"), None);
+    }
+    #[test]
+    fn harvest_emails_from_content() {
+        let c = "contact support@acme.com or admin@acme.io; noise a@b (not an email)";
+        let mut got = harvest_emails(c);
+        got.sort();
+        assert_eq!(got, vec!["admin@acme.io".to_string(), "support@acme.com".to_string()]);
+    }
 }
