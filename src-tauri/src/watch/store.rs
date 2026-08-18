@@ -27,6 +27,14 @@ CREATE TABLE IF NOT EXISTS findings (
   score      INTEGER NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS enrichment (
+  target      TEXT NOT NULL,
+  kind        TEXT NOT NULL,
+  value       TEXT NOT NULL,
+  result_json TEXT NOT NULL DEFAULT '',
+  first_seen  TEXT NOT NULL,
+  PRIMARY KEY (target, kind, value)
+);
 "#;
 
 pub struct Store {
@@ -101,5 +109,36 @@ impl Store {
             params![target, title, severity, score, Utc::now().to_rfc3339()],
         )?;
         Ok(())
+    }
+
+    /// Records that (target, kind, value) has been enrichment-queried. True if new.
+    pub fn enrichment_seen(&self, target: &str, kind: &str, value: &str) -> Result<bool> {
+        let n = self.conn.execute(
+            "INSERT OR IGNORE INTO enrichment (target, kind, value, first_seen) VALUES (?1, ?2, ?3, ?4)",
+            params![target, kind, value, Utc::now().to_rfc3339()],
+        )?;
+        Ok(n == 1)
+    }
+
+    pub fn save_enrichment(&self, target: &str, kind: &str, value: &str, result_json: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE enrichment SET result_json = ?4 WHERE target = ?1 AND kind = ?2 AND value = ?3",
+            params![target, kind, value, result_json],
+        )?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn mem() -> Store { let conn = Connection::open_in_memory().unwrap(); conn.execute_batch(SCHEMA).unwrap(); Store { conn } }
+
+    #[test]
+    fn enrichment_seen_is_true_once_then_false() {
+        let s = mem();
+        assert!(s.enrichment_seen("acme", "host", "a.acme.com").unwrap());  // first time: new
+        assert!(!s.enrichment_seen("acme", "host", "a.acme.com").unwrap()); // seen
+        assert!(s.enrichment_seen("acme", "email", "a.acme.com").unwrap()); // different kind: new
     }
 }
