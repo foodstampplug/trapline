@@ -36,6 +36,9 @@
     card.kind === 'leak' ? card.data.results.filter((r) => r.passwordPresent).length : 0
   );
 
+  // Breach cards title by provider (LeakCheck/Snusbase/DeHashed/LeakRadar).
+  const cardTitle = $derived(card.kind === 'leak' ? card.provider : TITLES[card.kind]);
+
   // Passwords are masked until the user reveals them (screenshot-safe default).
   let revealPw = $state(false);
 
@@ -55,9 +58,9 @@
 
 <div class="overlay">
   <button type="button" class="backdrop" aria-label="Close result card" onclick={close}></button>
-  <div class="card" class:wide={card.kind === 'leak'} role="dialog" aria-modal="true" aria-label={TITLES[card.kind]}>
+  <div class="card" class:wide={card.kind === 'leak'} role="dialog" aria-modal="true" aria-label={cardTitle}>
     <div class="head">
-      <h2>{TITLES[card.kind]}</h2>
+      <h2>{cardTitle}</h2>
       {#if arg}<span class="arg">{arg}</span>{/if}
       <button type="button" class="icon-btn" title="Close" onclick={close}>✕</button>
     </div>
@@ -194,8 +197,8 @@
               <table class="leaktable">
                 <thead>
                   <tr>
-                    <th>Email</th><th>Username</th><th>Password</th><th>Phone</th>
-                    <th>Name</th><th>Source</th><th>Date</th>
+                    <th>Email</th><th>Username</th><th>Password</th><th>Hash</th><th>Phone</th>
+                    <th>IP</th><th>Name</th><th>Source</th><th>Date</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -208,7 +211,9 @@
                           <span class="mono pwval" class:masked={!revealPw}>{revealPw ? r.password : '••••••'}</span>
                         {:else}—{/if}
                       </td>
+                      <td class="mono hashcell">{r.hash || '—'}</td>
                       <td class="mono">{r.phone || '—'}</td>
+                      <td class="mono">{r.ip || '—'}</td>
                       <td>{r.name || '—'}</td>
                       <td>{r.source || '—'}</td>
                       <td class="dim mono">{r.date || '—'}</td>
@@ -472,6 +477,11 @@
   .pwval.masked {
     color: var(--dim);
     letter-spacing: 0.15em;
+  }
+  .hashcell {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .note {
     font: 500 10.5px/1.5 var(--fui);

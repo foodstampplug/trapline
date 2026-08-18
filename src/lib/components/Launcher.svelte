@@ -1,8 +1,8 @@
 <script lang="ts">
   import { flattenTemplates, type Template } from '$lib/data/templates';
   import { isMissing } from '$lib/stores/tools';
-  import { INTEGRATIONS, type IntegrationEntry, type IntegrationCardData } from '$lib/data/integrations';
-  import { shodanHost, shodanDomain, shodanSearch, leakcheckQuery } from '$lib/bridge';
+  import { INTEGRATIONS, PROVIDER_LABELS, type IntegrationEntry, type IntegrationCardData } from '$lib/data/integrations';
+  import { shodanHost, shodanDomain, shodanSearch, breachQuery } from '$lib/bridge';
   import { applyShodanHost } from '$lib/stores/enrichment';
   import { toast } from '$lib/stores/toasts';
   import IntegrationCard from './IntegrationCard.svelte';
@@ -130,10 +130,11 @@
       const data = await shodanSearch(arg);
       return { kind: 'shodanSearch', data };
     }
-    // kind === 'leak' — every LeakCheck type routes through the one generic
-    // command with entry.leakType as the v2 `?type=` search type.
-    const data = await leakcheckQuery(arg, entry.leakType ?? 'auto');
-    return { kind: 'leak', data };
+    // kind === 'leak' — every breach provider routes through the one generic
+    // breach_query command; provider + leakType come from the entry.
+    const provider = entry.provider ?? 'leakcheck';
+    const data = await breachQuery(provider, arg, entry.leakType ?? 'auto');
+    return { kind: 'leak', provider: PROVIDER_LABELS[provider] ?? provider, data };
   }
 
   async function runIntegration(): Promise<void> {

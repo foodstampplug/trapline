@@ -1,4 +1,4 @@
-use crate::integrations::{leakcheck, shodan};
+use crate::integrations::{breach, leakcheck, shodan};
 use crate::AppState;
 use once_cell::sync::Lazy;
 use serde::Serialize;
@@ -212,11 +212,11 @@ fn run_enrich_pass(app: &AppHandle, app_cfg: &AppConfig, store: &Store, harvests
                 std::thread::sleep(ENRICH_GAP);
                 match result {
                     Ok(r) => {
-                        if let Err(e) = leakcheck::record_findings(&h.target, email, &r) {
+                        if let Err(e) = breach::record_findings("LeakCheck", &h.target, email, &r) {
                             eprintln!("[watch] leakcheck record_findings failed: {e}");
                         }
                         // At-rest cache must never hold plaintext passwords.
-                        let result_json = leakcheck::redacted_json(&r);
+                        let result_json = breach::redacted_json(&r);
                         if let Err(e) = store.save_enrichment(&h.target, "email", email, &result_json) {
                             eprintln!("[watch] save_enrichment(email) failed: {e}");
                         }

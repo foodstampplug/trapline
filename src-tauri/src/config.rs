@@ -63,6 +63,15 @@ pub struct Config {
     /// LeakCheck API key (Settings, masked). Sent only backend→leakcheck.io.
     #[serde(default)]
     pub leakcheck_api_key: String,
+    /// Snusbase API key (Settings, masked). Sent only backend→api.snusbase.com.
+    #[serde(default)]
+    pub snusbase_api_key: String,
+    /// DeHashed API key (Settings, masked). Sent only backend→api.dehashed.com.
+    #[serde(default)]
+    pub dehashed_api_key: String,
+    /// LeakRadar API key (Settings, masked). Sent only backend→api.leakradar.io.
+    #[serde(default)]
+    pub leakradar_api_key: String,
 }
 
 fn default_username() -> String {
@@ -102,6 +111,9 @@ impl Default for Config {
             watch_enabled: false,
             shodan_api_key: String::new(),
             leakcheck_api_key: String::new(),
+            snusbase_api_key: String::new(),
+            dehashed_api_key: String::new(),
+            leakradar_api_key: String::new(),
         }
     }
 }

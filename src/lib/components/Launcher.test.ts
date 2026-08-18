@@ -13,12 +13,13 @@ vi.mock('$lib/bridge', () => ({
   leakcheckDomain: vi.fn(),
   leakcheckEmail: vi.fn(),
   leakcheckQuery: vi.fn(),
+  breachQuery: vi.fn(),
 }));
 vi.mock('$lib/stores/enrichment', () => ({ applyShodanHost: vi.fn() }));
 vi.mock('$lib/stores/toasts', () => ({ toast: vi.fn() }));
 
 import Launcher from './Launcher.svelte';
-import { shodanHost, leakcheckQuery } from '$lib/bridge';
+import { shodanHost, breachQuery } from '$lib/bridge';
 import { applyShodanHost } from '$lib/stores/enrichment';
 import { toast } from '$lib/stores/toasts';
 
@@ -87,8 +88,8 @@ describe('Launcher — integration entries', () => {
     expect(await screen.findByText('CVE-2021-41773')).toBeInTheDocument();
   });
 
-  it('picking LeakCheck email prompts for an email (Enter submits) and opens a leak card via leakcheckQuery', async () => {
-    vi.mocked(leakcheckQuery).mockResolvedValue({
+  it('picking LeakCheck email prompts for an email (Enter submits) and opens a leak card via breachQuery', async () => {
+    vi.mocked(breachQuery).mockResolvedValue({
       found: 2,
       sources: [{ name: 'BreachCo', date: '2020-01-01' }],
       results: [],
@@ -104,8 +105,9 @@ describe('Launcher — integration entries', () => {
     await fireEvent.input(argInput, { target: { value: 'user@acme.com' } });
     await fireEvent.keyDown(argInput, { key: 'Enter' });
 
-    // Every LeakCheck command routes through the one generic query with its type.
-    expect(leakcheckQuery).toHaveBeenCalledWith('user@acme.com', 'email');
+    // Every breach command routes through the one generic breach_query with
+    // its provider + type.
+    expect(breachQuery).toHaveBeenCalledWith('leakcheck', 'user@acme.com', 'email');
     expect(await screen.findByText('BreachCo')).toBeInTheDocument();
   });
 

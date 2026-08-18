@@ -126,6 +126,9 @@ describe('command bridge', () => {
       watchEnabled: false,
       shodanApiKey: '',
       leakcheckApiKey: '',
+      snusbaseApiKey: '',
+      dehashedApiKey: '',
+      leakradarApiKey: '',
     };
     await bridge.setConfig(config);
     expect(invoke).toHaveBeenCalledWith('set_config', { config });

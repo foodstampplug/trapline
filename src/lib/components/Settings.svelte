@@ -34,6 +34,9 @@
   // path — and is never logged or echoed to a toast.
   let shodanApiKey = $state('');
   let leakcheckApiKey = $state('');
+  let snusbaseApiKey = $state('');
+  let dehashedApiKey = $state('');
+  let leakradarApiKey = $state('');
   let revealKeys = $state(false);
 
   // Watch section local editing state. `watchEnabled` is deliberately NOT
@@ -88,6 +91,9 @@
       shell = c.shell;
       shodanApiKey = c.shodanApiKey ?? '';
       leakcheckApiKey = c.leakcheckApiKey ?? '';
+      snusbaseApiKey = c.snusbaseApiKey ?? '';
+      dehashedApiKey = c.dehashedApiKey ?? '';
+      leakradarApiKey = c.leakradarApiKey ?? '';
       targets = cloneTargets(c.watchTargets ?? []);
       watchIntervalMin = Math.max(1, Math.round((c.watchIntervalSecs ?? 1800) / 60));
       watchAlertThreshold = c.watchAlertThreshold ?? 50;
@@ -129,6 +135,9 @@
         shell,
         shodanApiKey: shodanApiKey.trim(),
         leakcheckApiKey: leakcheckApiKey.trim(),
+        snusbaseApiKey: snusbaseApiKey.trim(),
+        dehashedApiKey: dehashedApiKey.trim(),
+        leakradarApiKey: leakradarApiKey.trim(),
         // watchEnabled intentionally omitted — see comment above the
         // Watch-section state block. saveConfig merges this patch over the
         // current config, so leaving it out preserves whatever the
@@ -274,7 +283,7 @@
         </select>
       </div>
 
-      <div class="sec-head">Integrations <span class="lbl-note">Shodan / LeakCheck API keys, used by enrichment</span></div>
+      <div class="sec-head">Integrations <span class="lbl-note">Shodan + breach-data API keys (LeakCheck / Snusbase / DeHashed / LeakRadar)</span></div>
 
       <div class="ff-col">
         <label for="setShodanKey">Shodan API key</label>
@@ -301,6 +310,42 @@
       </div>
 
       <div class="ff-col">
+        <label for="setSnusbaseKey">Snusbase API key</label>
+        <input
+          id="setSnusbaseKey"
+          type={revealKeys ? 'text' : 'password'}
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="Snusbase API key (sb…)"
+          bind:value={snusbaseApiKey}
+        />
+      </div>
+
+      <div class="ff-col">
+        <label for="setDehashedKey">DeHashed API key</label>
+        <input
+          id="setDehashedKey"
+          type={revealKeys ? 'text' : 'password'}
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="DeHashed API key"
+          bind:value={dehashedApiKey}
+        />
+      </div>
+
+      <div class="ff-col">
+        <label for="setLeakradarKey">LeakRadar API key</label>
+        <input
+          id="setLeakradarKey"
+          type={revealKeys ? 'text' : 'password'}
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="LeakRadar API key"
+          bind:value={leakradarApiKey}
+        />
+      </div>
+
+      <div class="ff-col">
         <button
           type="button"
           class="ghost-btn sm"
@@ -309,7 +354,7 @@
         >
           {revealKeys ? '🙈 Hide keys' : '👁 Reveal keys'}
         </button>
-        <span class="lbl-note key-note">Keys are stored locally and sent only to Shodan / LeakCheck.</span>
+        <span class="lbl-note key-note">Keys are stored locally and sent only to their provider's API.</span>
       </div>
 
       <div class="sec-head">Watch <span class="lbl-note">background change-detection scheduler</span></div>

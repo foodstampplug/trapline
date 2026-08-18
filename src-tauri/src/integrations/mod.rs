@@ -1,6 +1,10 @@
+pub mod breach;
 pub mod commands;
+pub mod dehashed;
 pub mod leakcheck;
+pub mod leakradar;
 pub mod shodan;
+pub mod snusbase;
 
 use std::time::Duration;
 

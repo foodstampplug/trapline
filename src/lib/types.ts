@@ -18,6 +18,9 @@ export interface Config {
   watchEnabled: boolean;
   shodanApiKey: string;
   leakcheckApiKey: string;
+  snusbaseApiKey: string;
+  dehashedApiKey: string;
+  leakradarApiKey: string;
 }
 
 // src-tauri/src/config.rs (WatchTarget) — #[serde(rename_all = "camelCase")]
@@ -162,6 +165,8 @@ export interface LeakRow {
   passwordPresent: boolean;
   phone: string;
   name: string;
+  hash: string;
+  ip: string;
   source: string;
   date: string;
 }

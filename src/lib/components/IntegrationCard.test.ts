@@ -44,20 +44,26 @@ describe('IntegrationCard', () => {
           passwordPresent: true,
           phone: '+1555',
           name: 'Thomas Anderson',
+          hash: 'deadbeef',
+          ip: '1.2.3.4',
           source: 'BreachCo 2019',
           date: '2019-06-01',
         },
-        { email: 'trin@acme.com', username: '', password: '', passwordPresent: false, phone: '', name: '', source: 'OtherLeak', date: '' },
+        { email: 'trin@acme.com', username: '', password: '', passwordPresent: false, phone: '', name: '', hash: '', ip: '', source: 'OtherLeak', date: '' },
       ],
     };
 
-    render(IntegrationCard, { props: { card: { kind: 'leak', data }, arg: 'acme.com' } });
+    render(IntegrationCard, { props: { card: { kind: 'leak', provider: 'Snusbase', data }, arg: 'acme.com' } });
 
-    // Real per-row intel renders in the table:
+    // The card is titled by its provider:
+    expect(screen.getByText('Snusbase')).toBeInTheDocument();
+    // Real per-row intel renders in the table (incl. the new hash + ip columns):
     expect(screen.getByText('neo@acme.com')).toBeInTheDocument();
     expect(screen.getByText('trin@acme.com')).toBeInTheDocument();
     expect(screen.getByText('neo')).toBeInTheDocument();
     expect(screen.getByText('Thomas Anderson')).toBeInTheDocument();
+    expect(screen.getByText('deadbeef')).toBeInTheDocument();
+    expect(screen.getByText('1.2.3.4')).toBeInTheDocument();
 
     // Password is masked by default — the plaintext is NOT visible yet:
     expect(screen.queryByText('hunter2')).not.toBeInTheDocument();

@@ -80,3 +80,7 @@ export const leakcheckEmail = (email: string) => invoke<LeakResult>('leakcheck_e
 // search type (auto/email/domain/username/phone/keyword/hash/phash/origin/password).
 export const leakcheckQuery = (value: string, kind: string) =>
   invoke<LeakResult>('leakcheck_query', { value, kind });
+// Generic breach lookup across every provider (leakcheck/snusbase/dehashed/
+// leakradar). `kind` is the provider's search type.
+export const breachQuery = (provider: string, value: string, kind: string) =>
+  invoke<LeakResult>('breach_query', { provider, value, kind });
