@@ -58,6 +58,8 @@ pub fn run() {
             integrations::commands::leakcheck_email,
             integrations::commands::leakcheck_query,
             integrations::commands::breach_query,
+            integrations::commands::export_breach,
+            integrations::commands::breach_to_finding,
         ])
         .setup(|app| {
             use tauri::Manager;

@@ -84,3 +84,9 @@ export const leakcheckQuery = (value: string, kind: string) =>
 // leakradar). `kind` is the provider's search type.
 export const breachQuery = (provider: string, value: string, kind: string) =>
   invoke<LeakResult>('breach_query', { provider, value, kind });
+// Export a breach result to a report file (md/html/csv/json/txt) → returns path.
+export const exportBreach = (provider: string, value: string, resultJson: string, format: string) =>
+  invoke<string>('export_breach', { provider, value, resultJson, format });
+// Add a breach result to the bug-bounty findings (report generator) → finding id.
+export const breachToFinding = (provider: string, value: string, resultJson: string) =>
+  invoke<string>('breach_to_finding', { provider, value, resultJson });

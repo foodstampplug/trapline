@@ -61,17 +61,25 @@ impl LeakResult {
     }
 }
 
+/// A copy of `r` with every plaintext password blanked (the `passwordPresent`
+/// flag is preserved). Used wherever the result must not carry plaintext at rest.
+pub fn strip_passwords(r: &LeakResult) -> LeakResult {
+    LeakResult {
+        found: r.found,
+        sources: r.sources.clone(),
+        results: r
+            .results
+            .iter()
+            .map(|row| LeakRow { password: String::new(), ..row.clone() })
+            .collect(),
+    }
+}
+
 /// Serialize a `LeakResult` for AT-REST caching (watch.db enrichment) with
 /// plaintext passwords stripped. The live card gets the full result over IPC —
 /// passwords included — but nothing plaintext is ever written to disk.
 pub fn redacted_json(r: &LeakResult) -> String {
-    let results: Vec<LeakRow> = r
-        .results
-        .iter()
-        .map(|row| LeakRow { password: String::new(), ..row.clone() })
-        .collect();
-    serde_json::to_string(&LeakResult { found: r.found, sources: r.sources.clone(), results })
-        .unwrap_or_default()
+    serde_json::to_string(&strip_passwords(r)).unwrap_or_default()
 }
 
 /// Map a normalized breach result to a HunterFinding JSON (camelCase). `None`

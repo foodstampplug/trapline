@@ -14,6 +14,8 @@
   // by default; they are live/in-memory only — never persisted to disk (the
   // finding + the watch.db cache both strip them; see leakcheck.rs).
   import type { IntegrationCardData } from '$lib/data/integrations';
+  import { exportBreach, breachToFinding } from '$lib/bridge';
+  import { toast } from '$lib/stores/toasts';
 
   let {
     card,
@@ -42,6 +44,37 @@
   // All data (incl. plaintext passwords) is shown revealed by default, per the
   // user's request; the toggle can re-mask the password column when needed.
   let revealPw = $state(true);
+
+  const EXPORT_FORMATS = ['md', 'html', 'csv', 'json', 'txt'];
+  let busy = $state(false);
+
+  async function doExport(format: string): Promise<void> {
+    if (card.kind !== 'leak' || busy) return;
+    const { provider, data } = card;
+    busy = true;
+    try {
+      const path = await exportBreach(provider, arg, JSON.stringify(data), format);
+      toast(`Exported → ${path}`, 'ok');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'err');
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function addToReport(): Promise<void> {
+    if (card.kind !== 'leak' || busy) return;
+    const { provider, data } = card;
+    busy = true;
+    try {
+      await breachToFinding(provider, arg, JSON.stringify(data));
+      toast('Added to findings — open the Findings panel to generate the report.', 'ok');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'err');
+    } finally {
+      busy = false;
+    }
+  }
 
   function close(): void {
     onClose?.();
@@ -165,6 +198,15 @@
         </div>
       {:else if card.kind === 'leak'}
         <div class="warn">⚠️ Authorized use only — third-party breach credentials, shown in cleartext.</div>
+        <div class="exportbar">
+          <span class="xlabel">Export</span>
+          {#each EXPORT_FORMATS as f (f)}
+            <button type="button" class="xbtn" disabled={busy} onclick={() => doExport(f)}>{f.toUpperCase()}</button>
+          {/each}
+          <button type="button" class="xbtn report" disabled={busy} onclick={addToReport} title="Save as a bug-bounty finding (passwords omitted from the finding)">
+            + Bug-bounty report
+          </button>
+        </div>
         <div class="row2">
           <div class="kv"><span class="k">Found</span><span class="v mono">{card.data.found}</span></div>
           {#if passwordCount > 0}
@@ -496,5 +538,40 @@
     border: 1px solid color-mix(in srgb, var(--crit) 40%, transparent);
     border-radius: calc(var(--radius) - 6px);
     padding: 8px 11px;
+  }
+  .exportbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .xlabel {
+    font: 700 9px/1 var(--fmono);
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-right: 2px;
+  }
+  .xbtn {
+    font: 600 10.5px/1 var(--fmono);
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--edge2);
+    border-radius: calc(var(--radius) - 8px);
+    padding: 5px 9px;
+    cursor: pointer;
+  }
+  .xbtn:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+  .xbtn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .xbtn.report {
+    color: #221a06;
+    background: var(--accent);
+    border-color: var(--accent);
+    margin-left: auto;
   }
 </style>

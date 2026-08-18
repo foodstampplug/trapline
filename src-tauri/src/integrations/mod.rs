@@ -1,4 +1,5 @@
 pub mod breach;
+pub mod breach_export;
 pub mod commands;
 pub mod dehashed;
 pub mod leakcheck;

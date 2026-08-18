@@ -2,9 +2,10 @@
 //! relevant API key out of `AppState.config` under a short lock, then hands
 //! off to the pure/async client fns in `integrations::{shodan, leakcheck}`.
 
-use crate::integrations::{breach, dehashed, leakcheck, leakradar, shodan, snusbase};
+use crate::integrations::{breach, breach_export, dehashed, leakcheck, leakradar, shodan, snusbase};
 use crate::AppState;
-use tauri::State;
+use tauri::{AppHandle, State};
+use tauri_plugin_opener::OpenerExt;
 
 /// Trim-and-validate a key, or an actionable error naming the provider.
 /// The one pure, unit-tested piece in this file.
@@ -137,9 +138,124 @@ pub async fn breach_query(
     Ok(r)
 }
 
+/// Sanitize a query value into a safe filename fragment.
+fn safe_name(s: &str) -> String {
+    let cleaned: String = s
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '.' { c } else { '_' })
+        .collect();
+    let t = cleaned.trim_matches('_');
+    let t = if t.is_empty() { "query" } else { t };
+    t.chars().take(48).collect()
+}
+
+/// `%APPDATA%\Trapline\exports\`.
+fn exports_dir() -> std::path::PathBuf {
+    let mut p = crate::config::config_path();
+    p.pop();
+    p.push("exports");
+    p
+}
+
+/// Export a breach result (parsed from `result_json`) to a report file in the
+/// chosen `format` (md/html/csv/json/txt), organized by source, footered
+/// `found by the plug @foodstampplug`. Writes to %APPDATA%\Trapline\exports,
+/// opens the folder, and returns the file path. Exports include cleartext
+/// passwords (explicit, user-initiated).
+#[tauri::command]
+pub fn export_breach(
+    provider: String,
+    value: String,
+    result_json: String,
+    format: String,
+    app: AppHandle,
+) -> Result<String, String> {
+    if breach_export::ext_for(&format).is_none() {
+        return Err(format!("Unsupported export format '{format}'"));
+    }
+    let r: breach::LeakResult =
+        serde_json::from_str(&result_json).map_err(|e| format!("bad result payload: {e}"))?;
+    let label = PROVIDER_LABEL.get(provider.as_str()).copied().unwrap_or(provider.as_str());
+    let (content, ext) = breach_export::export(label, &value, &r, &format);
+
+    let dir = exports_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let ts = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+    let fname = format!("{}_{}_{ts}.{ext}", safe_name(&provider), safe_name(&value));
+    let path = dir.join(fname);
+    std::fs::write(&path, content).map_err(|e| e.to_string())?;
+
+    // Best-effort: reveal the exports folder so the user sees the file.
+    let _ = app.opener().open_path(dir.to_string_lossy().to_string(), None::<&str>);
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// Add a breach result to the bug-bounty findings (the report generator's
+/// source). The persisted finding uses a PASSWORD-STRIPPED, organized markdown
+/// evidence — plaintext creds live only in the explicit export files, never in
+/// findings.json. Returns the finding id.
+#[tauri::command]
+pub fn breach_to_finding(
+    provider: String,
+    value: String,
+    result_json: String,
+) -> Result<String, String> {
+    let r: breach::LeakResult =
+        serde_json::from_str(&result_json).map_err(|e| format!("bad result payload: {e}"))?;
+    if r.found == 0 {
+        return Err("Nothing to add — 0 records.".into());
+    }
+    let label = PROVIDER_LABEL.get(provider.as_str()).copied().unwrap_or(provider.as_str());
+    let redacted = breach::strip_passwords(&r);
+    let (evidence, _) = breach_export::export(label, &value, &redacted, "md");
+
+    let severity = if r.results.iter().any(|row| row.password_present) { "critical" } else { "high" };
+    let id = format!(
+        "breach-{}-{}",
+        chrono::Utc::now().format("%Y%m%d-%H%M%S"),
+        &breach::sha256_hex(&format!("{label}:{value}"))[..6]
+    );
+    let finding = serde_json::json!({
+        "id": id,
+        "programName": value,
+        "platform": label,
+        "title": format!("Credential exposure: {value} ({} records via {label})", r.found),
+        "severity": severity,
+        "status": "draft",
+        "endpoint": value,
+        "summary": format!("{label} found {} record(s) for {value}. Full data in the exported report.", r.found),
+        "description": "",
+        "steps": "",
+        "evidence": evidence,
+        "impact": "",
+        "remediation": "",
+        "cvss": "",
+        "cvssScore": "",
+        "notes": "Plaintext passwords omitted from this finding — export the search for full credentials.",
+        "cmdline": label.to_lowercase(),
+    });
+    crate::findings::save(&serde_json::to_string(&finding).unwrap())?;
+    Ok(id)
+}
+
+/// Provider key → display label (shared by the breach export/finding commands).
+static PROVIDER_LABEL: once_cell::sync::Lazy<std::collections::HashMap<&'static str, &'static str>> =
+    once_cell::sync::Lazy::new(|| {
+        [("leakcheck", "LeakCheck"), ("snusbase", "Snusbase"), ("dehashed", "DeHashed"), ("leakradar", "LeakRadar")]
+            .into_iter()
+            .collect()
+    });
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn safe_name_sanitizes() {
+        assert_eq!(safe_name("acme.com"), "acme.com");
+        assert_eq!(safe_name("user@x.com"), "user_x.com");
+        assert_eq!(safe_name(""), "query");
+    }
 
     #[test]
     fn breach_key_resolves_labels_and_rejects_unknown() {

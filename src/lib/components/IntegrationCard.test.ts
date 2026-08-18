@@ -1,6 +1,14 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/svelte';
+
+vi.mock('$lib/bridge', () => ({
+  exportBreach: vi.fn(() => Promise.resolve('C:/Trapline/exports/x.md')),
+  breachToFinding: vi.fn(() => Promise.resolve('finding-1')),
+}));
+vi.mock('$lib/stores/toasts', () => ({ toast: vi.fn() }));
+
 import IntegrationCard from './IntegrationCard.svelte';
+import { exportBreach, breachToFinding } from '$lib/bridge';
 import type { ShodanHost, LeakResult } from '$lib/types';
 
 // This project's vite.config.ts doesn't set `test.globals`, so
@@ -74,5 +82,22 @@ describe('IntegrationCard', () => {
     await fireEvent.click(screen.getByRole('button', { name: /hide passwords/i }));
     expect(screen.queryByText('hunter2')).not.toBeInTheDocument();
     expect(screen.getAllByText('••••••').length).toBeGreaterThan(0);
+  });
+
+  it('exports the breach result to a file and adds it to the bug-bounty findings', async () => {
+    const data: LeakResult = {
+      found: 1,
+      sources: [{ name: 'BreachX', date: '2020-01' }],
+      results: [
+        { email: 'a@b.test', username: 'neo', password: 'pw', passwordPresent: true, phone: '', name: '', hash: '', ip: '', source: 'BreachX', date: '2020-01' },
+      ],
+    };
+    render(IntegrationCard, { props: { card: { kind: 'leak', provider: 'Snusbase', data }, arg: 'acme.com' } });
+
+    await fireEvent.click(screen.getByText('MD'));
+    expect(exportBreach).toHaveBeenCalledWith('Snusbase', 'acme.com', expect.any(String), 'md');
+
+    await fireEvent.click(screen.getByText(/bug-bounty report/i));
+    expect(breachToFinding).toHaveBeenCalledWith('Snusbase', 'acme.com', expect.any(String));
   });
 });
