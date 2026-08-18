@@ -152,8 +152,10 @@
     } catch (e) {
       // Errors (e.g. "Shodan API key not set — add it in Settings") surface
       // via the existing toast channel, never rendered as if they were
-      // result data, and never anything beyond the backend's own message —
-      // no key material ever reaches this catch block.
+      // result data. Shodan network-error strings could otherwise embed the
+      // API key (reqwest's Error Display includes the request URL, which
+      // carries `?key=...`) — integrations::shodan::fetch() scrubs the key
+      // from those errors on the backend before they ever reach this catch.
       toast(e instanceof Error ? e.message : String(e), 'err');
     } finally {
       loading = false;

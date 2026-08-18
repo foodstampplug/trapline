@@ -187,18 +187,25 @@ pub fn parse_search(body: &str) -> ShodanSearch {
     }
 }
 
+/// GET a Shodan URL, returning the body. Scrubs the API key from any error
+/// string — reqwest's Error Display embeds the request URL, which contains
+/// `?key=<KEY>`, so a raw `e.to_string()` would leak the key to the UI toast.
+async fn fetch(key: &str, url: &str) -> Result<String, String> {
+    let resp = super::client().get(url).send().await.map_err(|e| scrub(&e.to_string(), key))?;
+    resp.text().await.map_err(|e| scrub(&e.to_string(), key))
+}
+
+/// Replace every occurrence of the key with `***` (belt-and-suspenders: catches
+/// the key wherever reqwest embeds it, not just in the `?key=` position).
+fn scrub(msg: &str, key: &str) -> String {
+    if key.is_empty() { msg.to_string() } else { msg.replace(key, "***") }
+}
+
 pub async fn host(key: &str, ip: &str) -> Result<ShodanHost, String> {
     if key.trim().is_empty() {
         return Err("Shodan API key not set — add it in Settings".into());
     }
-    let body = super::client()
-        .get(host_url(key, ip))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .text()
-        .await
-        .map_err(|e| e.to_string())?;
+    let body = fetch(key, &host_url(key, ip)).await?;
     Ok(parse_host(&body))
 }
 
@@ -206,14 +213,7 @@ pub async fn domain(key: &str, domain: &str) -> Result<ShodanDomain, String> {
     if key.trim().is_empty() {
         return Err("Shodan API key not set — add it in Settings".into());
     }
-    let body = super::client()
-        .get(domain_url(key, domain))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .text()
-        .await
-        .map_err(|e| e.to_string())?;
+    let body = fetch(key, &domain_url(key, domain)).await?;
     Ok(parse_domain(&body))
 }
 
@@ -221,14 +221,7 @@ pub async fn search(key: &str, query: &str) -> Result<ShodanSearch, String> {
     if key.trim().is_empty() {
         return Err("Shodan API key not set — add it in Settings".into());
     }
-    let body = super::client()
-        .get(search_url(key, query))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .text()
-        .await
-        .map_err(|e| e.to_string())?;
+    let body = fetch(key, &search_url(key, query)).await?;
     Ok(parse_search(&body))
 }
 
@@ -316,6 +309,17 @@ mod tests {
         let s = parse_search("{}");
         assert_eq!(s.total, 0);
         assert!(s.matches.is_empty());
+    }
+
+    #[test]
+    fn scrub_removes_key_from_error_string() {
+        let key = "SHODAN_SECRET_KEY_123";
+        let leaky = format!("error sending request for url (https://api.shodan.io/shodan/host/1.2.3.4?key={key})");
+        let cleaned = scrub(&leaky, key);
+        assert!(!cleaned.contains(key), "key must be scrubbed from error, got: {cleaned}");
+        assert!(cleaned.contains("***"));
+        // empty key must not turn the whole string into ***
+        assert_eq!(scrub("some error", ""), "some error");
     }
 
     #[test]

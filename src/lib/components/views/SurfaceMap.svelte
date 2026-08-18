@@ -125,8 +125,11 @@
       }
     } catch (e) {
       // Same channel as every other async action in this app (Launcher.svelte's
-      // runIntegration) — only the backend's own message is ever shown, never
-      // key material (the bridge never returns the key on failure).
+      // runIntegration) — only the backend's own message is ever shown. Shodan
+      // network-error strings could otherwise embed the API key (reqwest's
+      // Error Display includes the request URL, which carries `?key=...`);
+      // integrations::shodan::fetch() scrubs the key from those errors on the
+      // backend before they ever reach this catch.
       toast(e instanceof Error ? e.message : String(e), 'err');
     } finally {
       enriching = false;
