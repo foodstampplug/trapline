@@ -1,5 +1,5 @@
 import { listen } from '@tauri-apps/api/event';
-import type { WatchStatus } from './types';
+import type { WatchStatus, EnrichHost } from './types';
 
 export interface Span { s: number; e: number; cat: string; sev: string; label: string }
 export interface QEvent {
@@ -19,4 +19,8 @@ export function onWatchStatus(handler: (s: WatchStatus) => void): Promise<() => 
 export interface WatchNewFinding { count: number; ts: number }
 export function onWatchNewFinding(handler: (e: WatchNewFinding) => void): Promise<() => void> {
   return listen<WatchNewFinding>('watch:new-finding', (ev) => handler(ev.payload));
+}
+
+export function onEnrichHost(handler: (e: EnrichHost) => void): Promise<() => void> {
+  return listen<EnrichHost>('enrich:host', (ev) => handler(ev.payload));
 }

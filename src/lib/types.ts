@@ -16,6 +16,8 @@ export interface Config {
   watchAlertThreshold: number;
   watchMaxRpm: number;
   watchEnabled: boolean;
+  shodanApiKey: string;
+  leakcheckApiKey: string;
 }
 
 // src-tauri/src/config.rs (WatchTarget) — #[serde(rename_all = "camelCase")]
@@ -104,4 +106,74 @@ export interface SendCardArgs {
 // src-tauri/src/commands.rs:193-223 — send_loot(markdown: String, state)
 export interface SendLootArgs {
   markdown: string;
+}
+
+// src-tauri/src/integrations/shodan.rs:26-75 — #[serde(rename_all = "camelCase")]
+export interface ShodanService {
+  port: number;
+  product: string;
+  version: string;
+}
+
+export interface ShodanHost {
+  ip: string;
+  org: string;
+  hostnames: string[];
+  ports: number[];
+  services: ShodanService[];
+  cves: string[];
+}
+
+export interface ShodanRecord {
+  kind: string;
+  value: string;
+}
+
+export interface ShodanDomain {
+  domain: string;
+  subdomains: string[];
+  records: ShodanRecord[];
+}
+
+export interface ShodanMatch {
+  ip: string;
+  port: number;
+  org: string;
+  product: string;
+  cves: string[];
+}
+
+export interface ShodanSearch {
+  total: number;
+  matches: ShodanMatch[];
+}
+
+// src-tauri/src/integrations/leakcheck.rs:20-42 — #[serde(rename_all = "camelCase")]
+export interface LeakSource {
+  name: string;
+  date: string;
+}
+
+export interface LeakRow {
+  email: string;
+  usernamePresent: boolean;
+  passwordPresent: boolean;
+  source: string;
+}
+
+export interface LeakResult {
+  found: number;
+  sources: LeakSource[];
+  results: LeakRow[];
+}
+
+// src-tauri/src/watch/scheduler.rs:189-198 — the `enrich:host` event payload,
+// emitted by the watch scheduler's auto-enrich pass (not a Rust struct —
+// built inline via serde_json::json!, so this mirrors those field names).
+export interface EnrichHost {
+  target: string;
+  host: string;
+  ports: number[];
+  cves: string[];
+  org: string;
 }

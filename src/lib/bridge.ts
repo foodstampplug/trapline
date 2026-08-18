@@ -13,6 +13,10 @@ import type {
   SendCardArgs,
   SendLootArgs,
   WatchStatus,
+  ShodanHost,
+  ShodanDomain,
+  ShodanSearch,
+  LeakResult,
 } from './types';
 
 // ── Run / cancel commands (src-tauri/src/commands.rs:92-122) ────────────────
@@ -65,3 +69,10 @@ export const watchStart = () => invoke<void>('watch_start');
 export const watchStop = () => invoke<void>('watch_stop');
 export const watchStatus = () => invoke<WatchStatus>('watch_status');
 export const watchRunOnce = () => invoke<void>('watch_run_once');
+
+// ── Integrations: Shodan + LeakCheck (src-tauri/src/integrations/commands.rs) ─
+export const shodanHost = (ip: string) => invoke<ShodanHost>('shodan_host', { ip });
+export const shodanDomain = (domain: string) => invoke<ShodanDomain>('shodan_domain', { domain });
+export const shodanSearch = (query: string) => invoke<ShodanSearch>('shodan_search', { query });
+export const leakcheckDomain = (domain: string) => invoke<LeakResult>('leakcheck_domain', { domain });
+export const leakcheckEmail = (email: string) => invoke<LeakResult>('leakcheck_email', { email });

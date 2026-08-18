@@ -124,6 +124,8 @@ describe('command bridge', () => {
       watchAlertThreshold: 50,
       watchMaxRpm: 30,
       watchEnabled: false,
+      shodanApiKey: '',
+      leakcheckApiKey: '',
     };
     await bridge.setConfig(config);
     expect(invoke).toHaveBeenCalledWith('set_config', { config });
