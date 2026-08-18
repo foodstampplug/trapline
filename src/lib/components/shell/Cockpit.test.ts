@@ -66,6 +66,17 @@ vi.mock('$lib/stores/watch', async () => {
     initWatch: vi.fn(() => Promise.resolve()),
   };
 });
+// Cockpit now also calls initEnrich() on mount (→ real Tauri listen(), which
+// throws outside a real Tauri webview) — mock the enrichment store the same
+// way as watch above.
+vi.mock('$lib/stores/enrichment', async () => {
+  const { writable } = await import('svelte/store');
+  return {
+    enrichment: writable(new Map()),
+    applyShodanHost: vi.fn(),
+    initEnrich: vi.fn(() => Promise.resolve()),
+  };
+});
 import Cockpit from './Cockpit.svelte';
 
 describe('Cockpit shell', () => {

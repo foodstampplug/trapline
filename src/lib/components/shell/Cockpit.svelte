@@ -21,6 +21,7 @@
   import { loadTools } from '$lib/stores/tools';
   import { loadFindings, newFinding } from '$lib/stores/findings';
   import { initWatch } from '$lib/stores/watch';
+  import { initEnrich } from '$lib/stores/enrichment';
   import type { Finding } from '$lib/types';
   import type { Template } from '$lib/data/templates';
 
@@ -80,6 +81,7 @@
     void loadTools();
     void loadFindings();
     void initWatch();
+    void initEnrich();
   });
 </script>
 

@@ -1,6 +1,9 @@
 <script lang="ts">
   import { surface } from '$lib/stores/surface';
   import type { Scope, SurfaceNode } from '$lib/stores/surface';
+  import { enrichment, applyShodanHost } from '$lib/stores/enrichment';
+  import { shodanHost, shodanDomain } from '$lib/bridge';
+  import { toast } from '$lib/stores/toasts';
 
   let { onCreateFinding }: { onCreateFinding?: (host: string) => void } = $props();
 
@@ -79,6 +82,56 @@
     if (!inspected) return;
     onCreateFinding?.(inspected.host);
   }
+
+  // Host-vs-IP heuristic for the Enrich action below. Deliberately naive
+  // (dotted-quad shape only, no octet-range validation) — recon-derived
+  // node hosts are either plain hostnames or literal IPv4 strings, never
+  // anything more exotic than that.
+  const IPV4_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+  function isIpHost(host: string): boolean {
+    return IPV4_RE.test(host);
+  }
+
+  /** CVE-count -> severity-tinted badge class, using the existing
+   * --high/--crit tokens (same pair severityClass() above draws from):
+   * any CVE at all is at least a "high" concern, 2+ escalates to "crit". */
+  function cveBadgeClass(count: number): string {
+    return count >= 2 ? 'crit' : 'high';
+  }
+
+  let enriching = $state(false);
+
+  // Enrich action: IP-shaped host -> shodanHost() -> applyShodanHost() folds
+  // the result into the enrichment store (an exact ShodanHost -> EnrichEntry
+  // type match, same path Launcher.svelte's callIntegration() uses for its
+  // shodanHost integration entry). A domain-shaped host -> shodanDomain()
+  // instead — but per Task 8's confirmed resolution (see enrichment.ts /
+  // Launcher.svelte comments), that result (domain/subdomains/records) is
+  // NOT forced through applyShodanHost: it carries none of the required
+  // ports/services/cves/org fields, and faking them would silently blank
+  // out any real host enrichment already held for that host. The domain
+  // lookup still runs (so a future domain-shaped surface can consume it)
+  // but the node/CVE badges below only ever populate from the host path.
+  async function enrichNode(): Promise<void> {
+    if (!inspected || enriching) return;
+    const host = inspected.host;
+    enriching = true;
+    try {
+      if (isIpHost(host)) {
+        const data = await shodanHost(host);
+        applyShodanHost(host, data);
+      } else {
+        await shodanDomain(host);
+      }
+    } catch (e) {
+      // Same channel as every other async action in this app (Launcher.svelte's
+      // runIntegration) — only the backend's own message is ever shown, never
+      // key material (the bridge never returns the key on failure).
+      toast(e instanceof Error ? e.message : String(e), 'err');
+    } finally {
+      enriching = false;
+    }
+  }
 </script>
 
 <div class="smap">
@@ -109,6 +162,7 @@
       </div>
 
       {#each activeScope.nodes as node, i (node.host)}
+        {@const enrich = $enrichment.get(node.host)}
         <button
           type="button"
           class="node {severityClass(node)}"
@@ -116,6 +170,18 @@
           onclick={() => openNode(node)}
         >
           <span class="d"></span>{node.host}
+          {#if enrich}
+            <span class="node-badges">
+              {#if enrich.ports.length > 0}
+                <span class="badge-ports" title="Shodan-reported open ports">{enrich.ports.join(', ')}</span>
+              {/if}
+              {#if enrich.cves.length > 0}
+                <span class="badge-cve {cveBadgeClass(enrich.cves.length)}" title="Shodan-reported CVEs">
+                  {enrich.cves.length} CVE
+                </span>
+              {/if}
+            </span>
+          {/if}
         </button>
       {/each}
 
@@ -129,6 +195,14 @@
             <div class="insp-sev {severityClass(inspected)}">{inspected.severity ?? 'flagged'}</div>
           {/if}
           <button type="button" class="insp-finding-btn" onclick={createFinding}>→ Finding</button>
+          <button
+            type="button"
+            class="insp-enrich-btn"
+            onclick={() => void enrichNode()}
+            disabled={enriching}
+          >
+            {enriching ? 'Enriching…' : '⚑ Enrich'}
+          </button>
         </div>
       {/if}
     </div>
@@ -226,6 +300,34 @@
     height: 7px;
     border-radius: 50%;
     background: var(--ok);
+  }
+  .node-badges {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 2px;
+  }
+  .badge-ports {
+    font: 700 9px/1 var(--fmono);
+    color: var(--muted);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--edge2);
+    border-radius: 4px;
+    padding: 3px 5px;
+    white-space: nowrap;
+  }
+  .badge-cve {
+    font: 700 9px/1 var(--fmono);
+    border: 1.5px solid currentColor;
+    border-radius: 4px;
+    padding: 3px 5px;
+    white-space: nowrap;
+  }
+  .badge-cve.high {
+    color: var(--high);
+  }
+  .badge-cve.crit {
+    color: var(--crit);
   }
   .node.center {
     border-color: var(--accent2);
@@ -338,5 +440,23 @@
   }
   .insp-finding-btn:hover {
     filter: brightness(1.09);
+  }
+  .insp-enrich-btn {
+    width: 100%;
+    margin-top: 8px;
+    font: 700 12px/1 var(--fdisp);
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.04);
+    border: var(--bordw) solid var(--edge2);
+    border-radius: calc(var(--radius) - 6px);
+    padding: 9px 12px;
+    cursor: pointer;
+  }
+  .insp-enrich-btn:hover {
+    border-color: var(--accent2);
+  }
+  .insp-enrich-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 </style>
