@@ -1,3 +1,4 @@
+pub mod commands;
 pub mod leakcheck;
 pub mod shodan;
 

@@ -51,6 +51,11 @@ pub fn run() {
             watch::scheduler::watch_stop,
             watch::scheduler::watch_status,
             watch::scheduler::watch_run_once,
+            integrations::commands::shodan_host,
+            integrations::commands::shodan_domain,
+            integrations::commands::shodan_search,
+            integrations::commands::leakcheck_domain,
+            integrations::commands::leakcheck_email,
         ])
         .setup(|app| {
             use tauri::Manager;
