@@ -32,7 +32,7 @@ describe('IntegrationCard', () => {
     expect(screen.getByText('CVE-2021-41773')).toBeInTheDocument();
   });
 
-  it('renders the LeakCheck table with per-row intel; password masked by default, reveal shows plaintext', async () => {
+  it('renders the breach table revealed by default (with an authorized-use warning); toggle re-masks passwords', async () => {
     const data: LeakResult = {
       found: 2,
       sources: [{ name: 'BreachCo 2019', date: '2019-06-01' }],
@@ -65,12 +65,14 @@ describe('IntegrationCard', () => {
     expect(screen.getByText('deadbeef')).toBeInTheDocument();
     expect(screen.getByText('1.2.3.4')).toBeInTheDocument();
 
-    // Password is masked by default — the plaintext is NOT visible yet:
+    // All data is revealed by default (user request) — plaintext is visible...
+    expect(screen.getByText('hunter2')).toBeInTheDocument();
+    // ...behind an "authorized use only" warning:
+    expect(screen.getByText(/authorized use only/i)).toBeInTheDocument();
+
+    // The toggle can re-mask the password column:
+    await fireEvent.click(screen.getByRole('button', { name: /hide passwords/i }));
     expect(screen.queryByText('hunter2')).not.toBeInTheDocument();
     expect(screen.getAllByText('••••••').length).toBeGreaterThan(0);
-
-    // Reveal shows the plaintext (user-authorized, live/in-memory only):
-    await fireEvent.click(screen.getByText(/reveal passwords/i));
-    expect(screen.getByText('hunter2')).toBeInTheDocument();
   });
 });

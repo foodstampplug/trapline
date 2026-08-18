@@ -39,8 +39,9 @@
   // Breach cards title by provider (LeakCheck/Snusbase/DeHashed/LeakRadar).
   const cardTitle = $derived(card.kind === 'leak' ? card.provider : TITLES[card.kind]);
 
-  // Passwords are masked until the user reveals them (screenshot-safe default).
-  let revealPw = $state(false);
+  // All data (incl. plaintext passwords) is shown revealed by default, per the
+  // user's request; the toggle can re-mask the password column when needed.
+  let revealPw = $state(true);
 
   function close(): void {
     onClose?.();
@@ -163,10 +164,11 @@
           {/if}
         </div>
       {:else if card.kind === 'leak'}
+        <div class="warn">⚠️ Authorized use only — third-party breach credentials, shown in cleartext.</div>
         <div class="row2">
           <div class="kv"><span class="k">Found</span><span class="v mono">{card.data.found}</span></div>
           {#if passwordCount > 0}
-            <div class="kv"><span class="k">Passwords</span><span class="v">🔒 {passwordCount} exposed</span></div>
+            <div class="kv"><span class="k">Passwords</span><span class="v">🔓 {passwordCount} cleartext</span></div>
           {/if}
         </div>
         <div class="section">
@@ -225,7 +227,7 @@
           {/if}
         </div>
         <div class="note">
-          Passwords are masked by default — reveal shows plaintext. Values are live/in-memory only and are never written to disk.
+          All data is shown revealed — use “hide passwords” to re-mask. Values are live/in-memory only and are never written to disk.
         </div>
       {/if}
     </div>
@@ -486,5 +488,13 @@
   .note {
     font: 500 10.5px/1.5 var(--fui);
     color: var(--dim);
+  }
+  .warn {
+    font: 700 11px/1.4 var(--fui);
+    color: var(--crit);
+    background: color-mix(in srgb, var(--crit) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--crit) 40%, transparent);
+    border-radius: calc(var(--radius) - 6px);
+    padding: 8px 11px;
   }
 </style>

@@ -26,8 +26,13 @@ pub fn valid_kind(kind: &str) -> bool {
 pub fn build_query(value: &str, kind: &str) -> String {
     if kind == "raw" || kind.is_empty() {
         value.to_string()
-    } else {
+    } else if value.contains(' ') {
+        // Quote multi-word values (e.g. name:"John Doe") so the space isn't AND.
         format!("{kind}:\"{value}\"")
+    } else {
+        // DeHashed v2 wants UNQUOTED field:value (e.g. domain:example.com —
+        // quoting a domain returned nothing).
+        format!("{kind}:{value}")
     }
 }
 
@@ -104,7 +109,9 @@ mod tests {
 
     #[test]
     fn query_builder() {
-        assert_eq!(build_query("a@b.test", "email"), "email:\"a@b.test\"");
+        assert_eq!(build_query("a@b.test", "email"), "email:a@b.test");
+        assert_eq!(build_query("example.com", "domain"), "domain:example.com");
+        assert_eq!(build_query("John Doe", "name"), "name:\"John Doe\""); // multi-word quoted
         assert_eq!(build_query("email:x", "raw"), "email:x");
         assert!(valid_kind("email") && valid_kind("raw"));
         assert!(!valid_kind("bogus"));

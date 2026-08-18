@@ -1,31 +1,19 @@
-//! LeakRadar client — DEFENSIVE / BEST-EFFORT. Base `https://api.leakradar.io`.
-//! ⚠️ The exact endpoint paths and auth-header name are best-effort — LeakRadar's
-//! docs (docs.leakradar.io) wouldn't load during integration, so CONFIRM these
-//! against your key and tweak the constants below if a call errors. Parsing is
-//! defensive: an unexpected shape degrades to an empty result, never a crash.
-//! Records are info-stealer credentials (url = the site the login belongs to).
+//! LeakRadar client (api.leakradar.io). Auth is `Authorization: Bearer <key>`.
+//! Email/username search: `POST /search/email` (body `{email}`). Domain search:
+//! `GET /search/domain/{domain}/all`. `auto_unlock=true` returns plaintext
+//! (costs LeakRadar credits). Records are info-stealer creds (url = login site).
+//! Parses into the shared `breach::LeakResult`; defensive over the container key.
 
 use serde::Deserialize;
 
 use super::breach::{LeakResult, LeakRow};
 
 const BASE: &str = "https://api.leakradar.io";
-/// ⚠️ CONFIRM: LeakRadar auth header (best guess — swap if the API rejects it).
-const AUTH_HEADER: &str = "X-API-Key";
 
 pub const KINDS: &[&str] = &["email", "domain", "raw"];
 
 pub fn valid_kind(k: &str) -> bool {
     KINDS.contains(&k)
-}
-
-/// ⚠️ CONFIRM endpoint paths — map a kind to its search path.
-pub fn endpoint(kind: &str) -> &'static str {
-    match kind {
-        "email" => "/emails/search",
-        "domain" => "/domains/search",
-        _ => "/search",
-    }
 }
 
 #[derive(Deserialize, Default)]
@@ -54,7 +42,9 @@ struct RawResponse {
     total: u64,
     #[serde(default)]
     count: u64,
-    // Tolerate a few likely container keys.
+    // Tolerate the likely container keys across the email/domain endpoints.
+    #[serde(default)]
+    leaks: Vec<RawRow>,
     #[serde(default)]
     results: Vec<RawRow>,
     #[serde(default)]
@@ -65,13 +55,10 @@ struct RawResponse {
 
 pub fn parse(body: &str) -> LeakResult {
     let raw: RawResponse = serde_json::from_str(body).unwrap_or_default();
-    let rows: Vec<RawRow> = if !raw.results.is_empty() {
-        raw.results
-    } else if !raw.data.is_empty() {
-        raw.data
-    } else {
-        raw.items
-    };
+    let rows: Vec<RawRow> = [raw.leaks, raw.results, raw.data, raw.items]
+        .into_iter()
+        .find(|v| !v.is_empty())
+        .unwrap_or_default();
     let mut out = LeakResult { found: raw.total.max(raw.count), ..Default::default() };
     for row in rows {
         let email = if !row.email.is_empty() {
@@ -81,6 +68,7 @@ pub fn parse(body: &str) -> LeakResult {
         } else {
             String::new()
         };
+        // `source` = the breach name if given, else the login URL (stealer logs).
         let src = if !row.source.is_empty() { row.source } else { row.url.clone() };
         out.add_source(&src, "");
         let pw = row.password;
@@ -104,12 +92,21 @@ pub async fn query(key: &str, value: &str, kind: &str) -> Result<LeakResult, Str
     if key.trim().is_empty() {
         return Err("LeakRadar API key not set — add it in Settings".into());
     }
-    let url = format!("{BASE}{}", endpoint(kind));
-    let text = super::client()
-        .get(url)
-        .header(AUTH_HEADER, key)
-        // `reveal=true` asks for plaintext (LeakRadar charges credits per reveal).
-        .query(&[("query", value), ("reveal", "true")])
+    let client = super::client();
+    // `auto_unlock=true` reveals plaintext creds (charges credits per record).
+    let req = if kind == "domain" {
+        client
+            .get(format!("{BASE}/search/domain/{value}/all"))
+            .query(&[("auto_unlock", "true"), ("page_size", "100")])
+    } else {
+        // email or raw → email/username search
+        client
+            .post(format!("{BASE}/search/email"))
+            .query(&[("auto_unlock", "true"), ("page_size", "100")])
+            .json(&serde_json::json!({ "email": value }))
+    };
+    let text = req
+        .header("Authorization", format!("Bearer {key}"))
         .send()
         .await
         .map_err(|e| e.to_string().replace(key, "***"))?
@@ -125,33 +122,30 @@ mod tests {
     use crate::integrations::breach::redacted_json;
 
     #[test]
-    fn endpoints_and_kinds() {
-        assert_eq!(endpoint("email"), "/emails/search");
-        assert_eq!(endpoint("domain"), "/domains/search");
-        assert_eq!(endpoint("raw"), "/search");
-        assert!(valid_kind("email") && valid_kind("raw"));
+    fn kinds() {
+        assert!(valid_kind("email") && valid_kind("domain") && valid_kind("raw"));
         assert!(!valid_kind("bogus"));
     }
 
     #[test]
-    fn parse_maps_common_fields_defensively() {
-        let sample = r#"{"total":1,"results":[
-          {"username":"neo","password":"hunter2","email_host":"neo","email_domain":"acme.com","url":"https://portal.acme.com"}
+    fn parse_maps_leakdetails_fields() {
+        // LeakDetails: username/password/email/url/source (docs.leakradar.io).
+        let sample = r#"{"total":1,"leaks":[
+          {"username":"neo","password":"hunter2","email":"neo@acme.com","url":"https://portal.acme.com","source":"StealerLog-2024"}
         ]}"#;
         let r = parse(sample);
         assert_eq!(r.found, 1);
         let row = &r.results[0];
         assert_eq!(row.username, "neo");
         assert_eq!(row.password, "hunter2");
-        assert_eq!(row.email, "neo@acme.com"); // composed from host+domain
-        assert_eq!(row.source, "https://portal.acme.com"); // url = the login's site
+        assert_eq!(row.email, "neo@acme.com");
+        assert_eq!(row.source, "StealerLog-2024"); // breach name preferred over url
         assert!(!redacted_json(&r).contains("hunter2"));
     }
 
     #[test]
     fn parse_tolerates_empty_and_alt_containers() {
         assert_eq!(parse("{}").found, 0);
-        let alt = r#"{"count":1,"data":[{"username":"x","password":"p"}]}"#;
-        assert_eq!(parse(alt).results.len(), 1);
+        assert_eq!(parse(r#"{"results":[{"username":"x","password":"p","url":"http://x"}]}"#).results.len(), 1);
     }
 }
