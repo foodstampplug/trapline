@@ -215,7 +215,8 @@ fn run_enrich_pass(app: &AppHandle, app_cfg: &AppConfig, store: &Store, harvests
                         if let Err(e) = leakcheck::record_findings(&h.target, email, &r) {
                             eprintln!("[watch] leakcheck record_findings failed: {e}");
                         }
-                        let result_json = serde_json::to_string(&r).unwrap_or_default();
+                        // At-rest cache must never hold plaintext passwords.
+                        let result_json = leakcheck::redacted_json(&r);
                         if let Err(e) = store.save_enrichment(&h.target, "email", email, &result_json) {
                             eprintln!("[watch] save_enrichment(email) failed: {e}");
                         }

@@ -28,12 +28,20 @@ pub struct LeakSource {
 #[serde(rename_all = "camelCase")]
 pub struct LeakRow {
     pub email: String,
-    /// The breached username (actual value — surfaced so the card shows real
-    /// intel, not a count). Empty when the row has none.
+    /// The breached username (actual value). Empty when the row has none.
     pub username: String,
-    /// Whether a password was in this breach row. The plaintext value is NEVER
-    /// stored/serialized — only this flag survives `parse`.
+    /// Plaintext password from the breach. Shown in the card at the user's
+    /// explicit request (authorized engagement). It STILL never reaches any
+    /// at-rest sink: `build_finding_json` never includes it, and `redacted_json`
+    /// (used for the watch.db enrichment cache) blanks it — only the live,
+    /// in-memory card ever sees the value.
+    pub password: String,
+    /// Convenience flag (`!password.is_empty()`) — drives severity + the card's
+    /// 🔒 marker without re-inspecting the value.
     pub password_present: bool,
+    pub phone: String,
+    /// Full name (`name` if present, else `first_name last_name`).
+    pub name: String,
     pub source: String,
     /// Per-row breach date (from `source.breach_date`), empty when unknown.
     pub date: String,
@@ -63,6 +71,14 @@ struct RawRow {
     username: String,
     #[serde(default)]
     password: String,
+    #[serde(default)]
+    phone: String,
+    #[serde(default)]
+    first_name: String,
+    #[serde(default)]
+    last_name: String,
+    #[serde(default)]
+    name: String,
     #[serde(default)]
     source: RawSource,
 }
@@ -95,16 +111,52 @@ pub fn parse(body: &str) -> LeakResult {
                 date: row.source.breach_date.clone(),
             });
         }
+        let pw = row.password;
+        let full_name = if !row.name.is_empty() {
+            row.name
+        } else {
+            format!("{} {}", row.first_name, row.last_name).trim().to_string()
+        };
         results.push(LeakRow {
             email: row.email,
             username: row.username,
-            password_present: !row.password.is_empty(),
+            password_present: !pw.is_empty(),
+            password: pw,
+            phone: row.phone,
+            name: full_name,
             source: row.source.name,
             date: row.source.breach_date,
         });
     }
 
     LeakResult { found: raw.found, sources, results }
+}
+
+/// Serialize a `LeakResult` for AT-REST caching (the watch.db enrichment cache)
+/// with plaintext passwords stripped. The live card receives the full result
+/// over IPC — passwords included, at the user's request — but nothing plaintext
+/// is ever written to disk.
+pub fn redacted_json(r: &LeakResult) -> String {
+    let results: Vec<LeakRow> = r
+        .results
+        .iter()
+        .map(|row| LeakRow {
+            email: row.email.clone(),
+            username: row.username.clone(),
+            password: String::new(), // stripped at rest
+            password_present: row.password_present,
+            phone: row.phone.clone(),
+            name: row.name.clone(),
+            source: row.source.clone(),
+            date: row.date.clone(),
+        })
+        .collect();
+    let sources = r
+        .sources
+        .iter()
+        .map(|s| LeakSource { name: s.name.clone(), date: s.date.clone() })
+        .collect();
+    serde_json::to_string(&LeakResult { found: r.found, sources, results }).unwrap_or_default()
 }
 
 /// Pure mapper: LeakResult -> HunterFinding JSON (camelCase). `None` when
@@ -198,18 +250,41 @@ mod tests {
     }
 
     #[test]
-    fn parse_maps_found_and_flags_without_plaintext() {
+    fn parse_retains_full_row_for_the_card_incl_password() {
         let sample = r#"{"success":true,"found":2,"result":[
-          {"email":"a@b.test","password":"hunter2","source":{"name":"BreachX","breach_date":"2020-01"}},
+          {"email":"neo@acme.com","username":"neo","password":"hunter2","phone":"+1555","first_name":"Thomas","last_name":"Anderson","source":{"name":"BreachX","breach_date":"2020-01"}},
           {"email":"c@b.test","username":"cc","source":{"name":"BreachY"}}
         ]}"#;
         let r = parse(sample);
         assert_eq!(r.found, 2);
-        assert!(r.results.iter().any(|x| x.password_present)); // flagged...
-        // ...but the plaintext value never appears anywhere in the serialized result:
+        let row = &r.results[0];
+        assert_eq!(row.email, "neo@acme.com");
+        assert_eq!(row.username, "neo");
+        assert_eq!(row.password, "hunter2"); // plaintext retained for the card
+        assert!(row.password_present);
+        assert_eq!(row.phone, "+1555");
+        assert_eq!(row.name, "Thomas Anderson");
+        assert_eq!(row.source, "BreachX");
+        assert_eq!(row.date, "2020-01");
+        // The live LeakResult DOES carry the password (it crosses IPC to the card):
         let j = serde_json::to_string(&r).unwrap();
-        assert!(!j.contains("hunter2"), "plaintext password must never be serialized");
+        assert!(j.contains("hunter2"));
         assert!(r.sources.iter().any(|s| s.name == "BreachX"));
+    }
+
+    #[test]
+    fn password_never_reaches_an_at_rest_sink() {
+        let sample = r#"{"found":1,"result":[
+          {"email":"a@b.test","username":"cc","password":"hunter2","source":{"name":"BreachX","breach_date":"2020-01"}}
+        ]}"#;
+        let r = parse(sample);
+        // The watch.db enrichment cache (redacted_json) must NOT carry the password:
+        assert!(!redacted_json(&r).contains("hunter2"), "cache must strip the plaintext password");
+        // ...but the rest of the row survives so the cache is still useful:
+        assert!(redacted_json(&r).contains("a@b.test"));
+        // The persisted finding (findings.json evidence) must NOT carry it either:
+        let j = build_finding_json("acme", "acme.com", &r).unwrap();
+        assert!(!j.contains("hunter2"), "finding must never persist the plaintext password");
     }
 
     #[test]
@@ -222,7 +297,10 @@ mod tests {
             results: vec![LeakRow {
                 email: "a@b.test".into(),
                 username: String::new(),
+                password: "hunter2".into(),
                 password_present: true,
+                phone: String::new(),
+                name: String::new(),
                 source: "BreachX".into(),
                 date: String::new(),
             }],
@@ -250,25 +328,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_retains_email_username_source_date_but_not_password() {
-        // The card needs real intel per row: email, username, source, date —
-        // but the plaintext password must STILL never survive parse.
-        let sample = r#"{"found":1,"result":[
-          {"email":"a@b.test","username":"neo","password":"hunter2","source":{"name":"BreachX","breach_date":"2020-01"}}
-        ]}"#;
-        let r = parse(sample);
-        let row = &r.results[0];
-        assert_eq!(row.email, "a@b.test");
-        assert_eq!(row.username, "neo"); // actual value now, not a bool
-        assert!(row.password_present); // flagged...
-        assert_eq!(row.source, "BreachX");
-        assert_eq!(row.date, "2020-01");
-        let j = serde_json::to_string(&r).unwrap();
-        assert!(j.contains("neo"), "username data must be shown");
-        assert!(!j.contains("hunter2"), "plaintext password must never be serialized");
-    }
-
-    #[test]
     fn parse_tolerates_missing_fields() {
         let r = parse("{}");
         assert_eq!(r.found, 0);
@@ -279,13 +338,14 @@ mod tests {
     #[test]
     fn parse_dedups_sources_by_name() {
         let sample = r#"{"success":true,"found":2,"result":[
-          {"email":"a@b.test","password":"x","source":{"name":"BreachX","breach_date":"2020-01"}},
-          {"email":"c@b.test","password":"y","source":{"name":"BreachX","breach_date":"2020-01"}}
+          {"email":"a@b.test","password":"pw1","source":{"name":"BreachX","breach_date":"2020-01"}},
+          {"email":"c@b.test","password":"pw2","source":{"name":"BreachX","breach_date":"2020-01"}}
         ]}"#;
         let r = parse(sample);
         assert_eq!(r.sources.len(), 1);
-        let j = serde_json::to_string(&r).unwrap();
-        assert!(!j.contains("\"x\"") && !j.contains("\"y\""));
+        // Passwords are NOT persisted: the redacted cache JSON strips both.
+        let cache = redacted_json(&r);
+        assert!(!cache.contains("pw1") && !cache.contains("pw2"));
     }
 
     #[test]

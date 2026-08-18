@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/svelte';
+import { render, screen, cleanup, fireEvent } from '@testing-library/svelte';
 import IntegrationCard from './IntegrationCard.svelte';
 import type { ShodanHost, LeakResult } from '$lib/types';
 
@@ -32,28 +32,39 @@ describe('IntegrationCard', () => {
     expect(screen.getByText('CVE-2021-41773')).toBeInTheDocument();
   });
 
-  it('renders LeakCheck per-row intel (email, username, source) but never a plaintext password', () => {
+  it('renders the LeakCheck table with per-row intel; password masked by default, reveal shows plaintext', async () => {
     const data: LeakResult = {
-      found: 3,
+      found: 2,
       sources: [{ name: 'BreachCo 2019', date: '2019-06-01' }],
       results: [
-        { email: 'neo@acme.com', username: 'neo', passwordPresent: true, source: 'BreachCo 2019', date: '2019-06-01' },
-        { email: 'trin@acme.com', username: '', passwordPresent: false, source: 'OtherLeak', date: '' },
+        {
+          email: 'neo@acme.com',
+          username: 'neo',
+          password: 'hunter2',
+          passwordPresent: true,
+          phone: '+1555',
+          name: 'Thomas Anderson',
+          source: 'BreachCo 2019',
+          date: '2019-06-01',
+        },
+        { email: 'trin@acme.com', username: '', password: '', passwordPresent: false, phone: '', name: '', source: 'OtherLeak', date: '' },
       ],
     };
 
     render(IntegrationCard, { props: { card: { kind: 'leak', data }, arg: 'acme.com' } });
 
-    // Real per-row intel is shown now, not just aggregate counts:
+    // Real per-row intel renders in the table:
     expect(screen.getByText('neo@acme.com')).toBeInTheDocument();
     expect(screen.getByText('trin@acme.com')).toBeInTheDocument();
-    expect(screen.getByText('neo')).toBeInTheDocument(); // the actual username value
-    expect(screen.getByText(/1 exposed/)).toBeInTheDocument(); // password-present surfaced as a count, not the value
+    expect(screen.getByText('neo')).toBeInTheDocument();
+    expect(screen.getByText('Thomas Anderson')).toBeInTheDocument();
 
-    // The plaintext password value must NEVER render — LeakRow carries only
-    // `passwordPresent: boolean`, and the card shows a 🔒 marker only.
-    expect(screen.queryByText(/password123|hunter2/i)).not.toBeInTheDocument();
-    const html = document.body.innerHTML.toLowerCase();
-    expect(html).not.toContain('"password"');
+    // Password is masked by default — the plaintext is NOT visible yet:
+    expect(screen.queryByText('hunter2')).not.toBeInTheDocument();
+    expect(screen.getAllByText('••••••').length).toBeGreaterThan(0);
+
+    // Reveal shows the plaintext (user-authorized, live/in-memory only):
+    await fireEvent.click(screen.getByText(/reveal passwords/i));
+    expect(screen.getByText('hunter2')).toBeInTheDocument();
   });
 });

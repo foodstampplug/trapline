@@ -7,11 +7,12 @@
   //
   // Everything below renders via plain Svelte text bindings — never
   // {@html}/innerHTML — since Shodan/LeakCheck values are untrusted, remote
-  // strings (org names, hostnames, breach source names, emails, etc). The
-  // LeakCheck card shows the real per-row intel (email · username · source ·
-  // date), but the plaintext PASSWORD is never in LeakResult's type (LeakRow
-  // in $lib/types.ts carries only `passwordPresent: boolean` — see
-  // leakcheck.rs) so it can't be rendered; a 🔒 marks a row where one leaked.
+  // strings (org names, breach source names, emails, passwords, etc).
+  // The LeakCheck card shows full per-row intel in a table (email · username ·
+  // password · phone · name · source · date). Plaintext PASSWORDS are shown at
+  // the user's explicit request (authorized use), hidden behind a reveal toggle
+  // by default; they are live/in-memory only — never persisted to disk (the
+  // finding + the watch.db cache both strip them; see leakcheck.rs).
   import type { IntegrationCardData } from '$lib/data/integrations';
 
   let {
@@ -35,6 +36,9 @@
     card.kind === 'leak' ? card.data.results.filter((r) => r.passwordPresent).length : 0
   );
 
+  // Passwords are masked until the user reveals them (screenshot-safe default).
+  let revealPw = $state(false);
+
   function close(): void {
     onClose?.();
   }
@@ -51,7 +55,7 @@
 
 <div class="overlay">
   <button type="button" class="backdrop" aria-label="Close result card" onclick={close}></button>
-  <div class="card" role="dialog" aria-modal="true" aria-label={TITLES[card.kind]}>
+  <div class="card" class:wide={card.kind === 'leak'} role="dialog" aria-modal="true" aria-label={TITLES[card.kind]}>
     <div class="head">
       <h2>{TITLES[card.kind]}</h2>
       {#if arg}<span class="arg">{arg}</span>{/if}
@@ -175,23 +179,49 @@
           {/if}
         </div>
         <div class="section">
-          <div class="sh">Results <span class="c">{card.data.results.length}</span></div>
+          <div class="sh">
+            Results <span class="c">{card.data.results.length}</span>
+            {#if passwordCount > 0}
+              <button type="button" class="reveal" onclick={() => (revealPw = !revealPw)}>
+                {revealPw ? '🙈 hide passwords' : '👁 reveal passwords'}
+              </button>
+            {/if}
+          </div>
           {#if card.data.results.length === 0}
             <div class="none">no rows</div>
           {:else}
-            <div class="list">
-              {#each card.data.results as r, i (r.email + '|' + r.source + '|' + i)}
-                <div class="li leakrow">
-                  <span class="v mono">{r.email || '—'}</span>
-                  {#if r.username}<span class="tag user">{r.username}</span>{/if}
-                  <span class="dim">{r.source}{r.date ? ' · ' + r.date : ''}</span>
-                  {#if r.passwordPresent}<span class="pw" title="password present — value withheld by design">🔒</span>{/if}
-                </div>
-              {/each}
+            <div class="tablewrap">
+              <table class="leaktable">
+                <thead>
+                  <tr>
+                    <th>Email</th><th>Username</th><th>Password</th><th>Phone</th>
+                    <th>Name</th><th>Source</th><th>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each card.data.results as r, i (r.email + '|' + r.source + '|' + i)}
+                    <tr>
+                      <td class="mono">{r.email || '—'}</td>
+                      <td>{r.username || '—'}</td>
+                      <td class="pwcell">
+                        {#if r.passwordPresent}
+                          <span class="mono pwval" class:masked={!revealPw}>{revealPw ? r.password : '••••••'}</span>
+                        {:else}—{/if}
+                      </td>
+                      <td class="mono">{r.phone || '—'}</td>
+                      <td>{r.name || '—'}</td>
+                      <td>{r.source || '—'}</td>
+                      <td class="dim mono">{r.date || '—'}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
             </div>
           {/if}
         </div>
-        <div class="note">Plaintext passwords are withheld by design — 🔒 marks a row where one was exposed.</div>
+        <div class="note">
+          Passwords are masked by default — reveal shows plaintext. Values are live/in-memory only and are never written to disk.
+        </div>
       {/if}
     </div>
   </div>
@@ -233,6 +263,9 @@
     border-radius: var(--radius);
     padding: 20px;
     box-shadow: var(--shadow);
+  }
+  .card.wide {
+    width: min(96vw, 940px);
   }
   .head {
     display: flex;
@@ -388,17 +421,57 @@
     font-family: var(--fmono);
   }
 
-  .li.leakrow {
-    flex-wrap: wrap;
-  }
-  .li .tag.user {
-    color: var(--accent2);
-    border-color: color-mix(in srgb, var(--accent2) 40%, transparent);
-  }
-  .pw {
+  .reveal {
     margin-left: auto;
-    font-size: 12px;
-    flex-shrink: 0;
+    font: 600 10px/1 var(--fmono);
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--accent);
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    border-radius: calc(var(--radius) - 8px);
+    padding: 4px 8px;
+    cursor: pointer;
+  }
+  .reveal:hover {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .tablewrap {
+    overflow-x: auto;
+    border: 1px solid var(--edge);
+    border-radius: calc(var(--radius) - 6px);
+  }
+  table.leaktable {
+    width: 100%;
+    border-collapse: collapse;
+    font: 500 11px/1.4 var(--fui);
+  }
+  table.leaktable th {
+    text-align: left;
+    font: 700 9px/1 var(--fmono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--edge2);
+    white-space: nowrap;
+  }
+  table.leaktable td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--edge);
+    color: var(--ink);
+    white-space: nowrap;
+    vertical-align: top;
+  }
+  table.leaktable tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .pwval {
+    color: var(--crit);
+  }
+  .pwval.masked {
+    color: var(--dim);
+    letter-spacing: 0.15em;
   }
   .note {
     font: 500 10.5px/1.5 var(--fui);

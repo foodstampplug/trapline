@@ -76,3 +76,7 @@ export const shodanDomain = (domain: string) => invoke<ShodanDomain>('shodan_dom
 export const shodanSearch = (query: string) => invoke<ShodanSearch>('shodan_search', { query });
 export const leakcheckDomain = (domain: string) => invoke<LeakResult>('leakcheck_domain', { domain });
 export const leakcheckEmail = (email: string) => invoke<LeakResult>('leakcheck_email', { email });
+// Generic LeakCheck lookup — backs every ⌘K LeakCheck command. `kind` is the v2
+// search type (auto/email/domain/username/phone/keyword/hash/phash/origin/password).
+export const leakcheckQuery = (value: string, kind: string) =>
+  invoke<LeakResult>('leakcheck_query', { value, kind });

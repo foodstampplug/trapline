@@ -157,7 +157,11 @@ export interface LeakSource {
 export interface LeakRow {
   email: string;
   username: string;
+  /** Plaintext password (shown in the card by user request; never persisted). */
+  password: string;
   passwordPresent: boolean;
+  phone: string;
+  name: string;
   source: string;
   date: string;
 }

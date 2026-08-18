@@ -12,12 +12,13 @@ vi.mock('$lib/bridge', () => ({
   shodanSearch: vi.fn(),
   leakcheckDomain: vi.fn(),
   leakcheckEmail: vi.fn(),
+  leakcheckQuery: vi.fn(),
 }));
 vi.mock('$lib/stores/enrichment', () => ({ applyShodanHost: vi.fn() }));
 vi.mock('$lib/stores/toasts', () => ({ toast: vi.fn() }));
 
 import Launcher from './Launcher.svelte';
-import { shodanHost, leakcheckEmail } from '$lib/bridge';
+import { shodanHost, leakcheckQuery } from '$lib/bridge';
 import { applyShodanHost } from '$lib/stores/enrichment';
 import { toast } from '$lib/stores/toasts';
 
@@ -52,8 +53,10 @@ describe('Launcher — integration entries', () => {
     expect(screen.getByText('Shodan: search')).toBeInTheDocument();
 
     await fireEvent.input(search, { target: { value: 'leakcheck' } });
-    expect(screen.getByText('LeakCheck: domain breach check')).toBeInTheDocument();
-    expect(screen.getByText('LeakCheck: email breach check')).toBeInTheDocument();
+    expect(screen.getByText('LeakCheck: domain')).toBeInTheDocument();
+    expect(screen.getByText('LeakCheck: email')).toBeInTheDocument();
+    expect(screen.getByText('LeakCheck: username')).toBeInTheDocument();
+    expect(screen.getByText('LeakCheck: password (Enterprise)')).toBeInTheDocument();
   });
 
   it('picking Shodan host prompts for an ip, calls shodanHost + applyShodanHost, and opens the card', async () => {
@@ -84,8 +87,8 @@ describe('Launcher — integration entries', () => {
     expect(await screen.findByText('CVE-2021-41773')).toBeInTheDocument();
   });
 
-  it('picking LeakCheck email prompts for an email (Enter submits) and opens a leak card', async () => {
-    vi.mocked(leakcheckEmail).mockResolvedValue({
+  it('picking LeakCheck email prompts for an email (Enter submits) and opens a leak card via leakcheckQuery', async () => {
+    vi.mocked(leakcheckQuery).mockResolvedValue({
       found: 2,
       sources: [{ name: 'BreachCo', date: '2020-01-01' }],
       results: [],
@@ -95,16 +98,15 @@ describe('Launcher — integration entries', () => {
 
     const search = screen.getByPlaceholderText(/search/i);
     await fireEvent.input(search, { target: { value: 'LeakCheck: email' } });
-    await fireEvent.click(screen.getByText('LeakCheck: email breach check').closest('button')!);
+    await fireEvent.click(screen.getByText('LeakCheck: email').closest('button')!);
 
     const argInput = screen.getByPlaceholderText('user@example.com');
     await fireEvent.input(argInput, { target: { value: 'user@acme.com' } });
     await fireEvent.keyDown(argInput, { key: 'Enter' });
 
-    expect(leakcheckEmail).toHaveBeenCalledWith('user@acme.com');
+    // Every LeakCheck command routes through the one generic query with its type.
+    expect(leakcheckQuery).toHaveBeenCalledWith('user@acme.com', 'email');
     expect(await screen.findByText('BreachCo')).toBeInTheDocument();
-    // Never a rendered password field — see IntegrationCard.test.ts for the
-    // dedicated redacted-summary coverage.
   });
 
   it('a bridge error (e.g. missing key) surfaces via toast, never rendered as card data, and no key leaks', async () => {

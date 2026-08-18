@@ -71,9 +71,47 @@ pub async fn leakcheck_email(
     Ok(r)
 }
 
+/// Every LeakCheck v2 query type (docs.leakcheck.io/pro-api/search-types).
+/// `phash`/`origin`/`password` are Enterprise-only but valid to send.
+pub const LEAKCHECK_KINDS: &[&str] = &[
+    "auto", "email", "domain", "username", "phone", "keyword", "hash", "phash", "origin", "password",
+];
+
+pub fn leakcheck_valid_kind(kind: &str) -> bool {
+    LEAKCHECK_KINDS.contains(&kind)
+}
+
+/// Generic LeakCheck lookup for any supported `kind` — backs all the ⌘K
+/// LeakCheck commands. `value` is the query, `kind` the search type.
+#[tauri::command]
+pub async fn leakcheck_query(
+    value: String,
+    kind: String,
+    state: State<'_, AppState>,
+) -> Result<leakcheck::LeakResult, String> {
+    if !leakcheck_valid_kind(&kind) {
+        return Err(format!("Unsupported LeakCheck type '{kind}'"));
+    }
+    let key = key_or_err(&state.config.lock().unwrap().leakcheck_api_key, "LeakCheck")?;
+    let r = leakcheck::query(&key, &value, &kind).await?;
+    // On-demand lookup has no watch-target context, so `target` is the queried
+    // value itself. Best-effort: the card still returns if the findings write fails.
+    let _ = leakcheck::record_findings(&value, &value, &r);
+    Ok(r)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn leakcheck_kind_allowlist() {
+        for k in ["auto", "email", "domain", "username", "phone", "keyword", "hash", "phash", "origin", "password"] {
+            assert!(leakcheck_valid_kind(k), "{k} should be valid");
+        }
+        assert!(!leakcheck_valid_kind("bogus"));
+        assert!(!leakcheck_valid_kind(""));
+    }
 
     #[test]
     fn missing_key_message_is_actionable() {

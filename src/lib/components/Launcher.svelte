@@ -2,7 +2,7 @@
   import { flattenTemplates, type Template } from '$lib/data/templates';
   import { isMissing } from '$lib/stores/tools';
   import { INTEGRATIONS, type IntegrationEntry, type IntegrationCardData } from '$lib/data/integrations';
-  import { shodanHost, shodanDomain, shodanSearch, leakcheckDomain, leakcheckEmail } from '$lib/bridge';
+  import { shodanHost, shodanDomain, shodanSearch, leakcheckQuery } from '$lib/bridge';
   import { applyShodanHost } from '$lib/stores/enrichment';
   import { toast } from '$lib/stores/toasts';
   import IntegrationCard from './IntegrationCard.svelte';
@@ -63,7 +63,7 @@
   );
 
   function rowKey(row: ResultRow): string {
-    return row.rowKind === 'template' ? 'template::' + row.cat + '::' + row.name : 'integration::' + row.kind;
+    return row.rowKind === 'template' ? 'template::' + row.cat + '::' + row.name : 'integration::' + row.name;
   }
 
   // Keep the highlighted row in range whenever the result set changes.
@@ -130,11 +130,9 @@
       const data = await shodanSearch(arg);
       return { kind: 'shodanSearch', data };
     }
-    if (entry.kind === 'leakDomain') {
-      const data = await leakcheckDomain(arg);
-      return { kind: 'leak', data };
-    }
-    const data = await leakcheckEmail(arg);
+    // kind === 'leak' — every LeakCheck type routes through the one generic
+    // command with entry.leakType as the v2 `?type=` search type.
+    const data = await leakcheckQuery(arg, entry.leakType ?? 'auto');
     return { kind: 'leak', data };
   }
 

@@ -10,7 +10,7 @@
 // use at all.
 import type { ShodanHost, ShodanDomain, ShodanSearch, LeakResult } from '$lib/types';
 
-export type IntegrationKind = 'shodanHost' | 'shodanDomain' | 'shodanSearch' | 'leakDomain' | 'leakEmail';
+export type IntegrationKind = 'shodanHost' | 'shodanDomain' | 'shodanSearch' | 'leak';
 
 export interface IntegrationEntry {
   kind: IntegrationKind;
@@ -20,6 +20,8 @@ export interface IntegrationEntry {
   /** Label shown next to the single arg input (e.g. "ip", "domain", "email"). */
   argLabel: string;
   argPlaceholder: string;
+  /** For kind==='leak': the LeakCheck v2 search type sent as `?type=`. */
+  leakType?: string;
 }
 
 export const INTEGRATIONS: IntegrationEntry[] = [
@@ -47,26 +49,104 @@ export const INTEGRATIONS: IntegrationEntry[] = [
     argLabel: 'query',
     argPlaceholder: 'port:8001 kong',
   },
+  // Every LeakCheck v2 search type (docs.leakcheck.io/pro-api/search-types).
+  // All route through one generic `leakcheck_query(value, kind)` command and
+  // render the same LeakResult table; `leakType` is the `?type=` value.
+  // phash/origin/password are Enterprise-only.
   {
-    kind: 'leakDomain',
-    name: 'LeakCheck: domain breach check',
-    desc: 'found count + sources for every address at a domain',
+    kind: 'leak',
+    leakType: 'auto',
+    name: 'LeakCheck: auto',
+    desc: 'auto-detect email / username / phone / hash',
+    cat: 'Integrations',
+    argLabel: 'query',
+    argPlaceholder: 'user@example.com',
+  },
+  {
+    kind: 'leak',
+    leakType: 'email',
+    name: 'LeakCheck: email',
+    desc: 'breaches for a single email address',
+    cat: 'Integrations',
+    argLabel: 'email',
+    argPlaceholder: 'user@example.com',
+  },
+  {
+    kind: 'leak',
+    leakType: 'domain',
+    name: 'LeakCheck: domain',
+    desc: 'every breached address at a domain',
     cat: 'Integrations',
     argLabel: 'domain',
     argPlaceholder: 'example.com',
   },
   {
-    kind: 'leakEmail',
-    name: 'LeakCheck: email breach check',
-    desc: 'found count + sources for a single email',
+    kind: 'leak',
+    leakType: 'username',
+    name: 'LeakCheck: username',
+    desc: 'breaches tied to a username',
     cat: 'Integrations',
-    argLabel: 'email',
-    argPlaceholder: 'user@example.com',
+    argLabel: 'username',
+    argPlaceholder: 'neo',
+  },
+  {
+    kind: 'leak',
+    leakType: 'phone',
+    name: 'LeakCheck: phone',
+    desc: 'breaches tied to a phone number',
+    cat: 'Integrations',
+    argLabel: 'phone',
+    argPlaceholder: '15551234567',
+  },
+  {
+    kind: 'leak',
+    leakType: 'keyword',
+    name: 'LeakCheck: keyword',
+    desc: 'free-text keyword search across breaches',
+    cat: 'Integrations',
+    argLabel: 'keyword',
+    argPlaceholder: 'acme',
+  },
+  {
+    kind: 'leak',
+    leakType: 'hash',
+    name: 'LeakCheck: hash',
+    desc: 'SHA256 hash of a lower-cased email',
+    cat: 'Integrations',
+    argLabel: 'sha256',
+    argPlaceholder: 'a1b2c3…',
+  },
+  {
+    kind: 'leak',
+    leakType: 'phash',
+    name: 'LeakCheck: password hash (Enterprise)',
+    desc: 'SHA256 hash of a password',
+    cat: 'Integrations',
+    argLabel: 'sha256',
+    argPlaceholder: 'a1b2c3…',
+  },
+  {
+    kind: 'leak',
+    leakType: 'origin',
+    name: 'LeakCheck: origin (Enterprise)',
+    desc: 'info-stealer logs by the site the creds belong to',
+    cat: 'Integrations',
+    argLabel: 'site',
+    argPlaceholder: 'example.com',
+  },
+  {
+    kind: 'leak',
+    leakType: 'password',
+    name: 'LeakCheck: password (Enterprise)',
+    desc: 'accounts found using a given plaintext password',
+    cat: 'Integrations',
+    argLabel: 'password',
+    argPlaceholder: 'hunter2',
   },
 ];
 
-// LeakCheck's two entries (leakDomain/leakEmail) share one LeakResult shape,
-// so the card kind is coarser than IntegrationKind.
+// Every LeakCheck type shares one LeakResult shape, so the card kind is
+// coarser than IntegrationKind (which is already just 'leak' for them).
 export type CardKind = 'shodanHost' | 'shodanDomain' | 'shodanSearch' | 'leak';
 
 export type IntegrationCardData =
