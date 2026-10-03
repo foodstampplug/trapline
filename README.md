@@ -11,7 +11,7 @@
 Trapline is a Windows desktop app that fixes three things that cost bug bounty hunters time:
 
 1. **Finding the right command fast** — 215 commands across 30 categories with live search. No more digging through Notion docs or bash aliases.
-2. **Missing findings in streamed output** — 94 detection rules scan every output line in real time. ATO tokens, secrets, CORS misconfigs, private IPs — flagged in red before you finish reading.
+2. **Missing findings in streamed output** — 125 detection rules scan every output line in real time. ATO tokens, secrets, CORS misconfigs, private IPs — flagged in red before you finish reading.
 3. **The report template grind** — One click generates a complete HackerOne/Bugcrowd submission: CVSS:3.1 vector auto-calculated, OWASP reference matched from your title, impact statement pre-filled.
 
 ---
@@ -56,7 +56,7 @@ Every command came from a real engagement. Categories include:
 - Cloud misconfiguration
 - And 16 more
 
-### 94 Real-Time Detection Rules
+### 125 Real-Time Detection Rules
 Fires on every output line as it streams. Catches:
 - **ATO tokens** — `idToken`, `access_token`, `oauth_token`, `auth_data`, `bearer_token`
 - **API secrets** — Stripe `sk_live_`, Twilio `AC[a-f0-9]{32}`, SendGrid `SG.`, GitHub `gh[pousr]_`, OpenAI `sk-`
@@ -116,7 +116,7 @@ go install github.com/tomnomnom/gf@latest
 
 - **Frontend** — Vanilla JS, CSS, HTML (no framework)
 - **Backend** — Rust (Tauri v2)
-- **Detection engine** — `once_cell::sync::Lazy` compiled regex, 94 rules
+- **Detection engine** — `once_cell::sync::Lazy` compiled regex, 125 rules
 - **Process runner** — `CREATE_NO_WINDOW` on Windows, full stdout/stderr streaming
 - **Storage** — JSON files in `%APPDATA%\Trapline\`
 
@@ -127,7 +127,7 @@ go install github.com/tomnomnom/gf@latest
 | | Free | Pro ($9 one-time) |
 |---|---|---|
 | All 215 commands | ✓ | ✓ |
-| 94 detection rules | ✓ | ✓ |
+| 125 detection rules | ✓ | ✓ |
 | Finding tracker | ✓ | ✓ |
 | Report generator | ✓ | ✓ |
 | Discord webhook | ✓ | ✓ |
