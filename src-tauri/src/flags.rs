@@ -454,3 +454,52 @@ fn truncate_str(s: &str, n: usize) -> String {
         s.to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Guard against silent rule drift. When you intentionally add or remove a rule,
+    /// update this number AND the header comment in this file + the README counts.
+    const EXPECTED_RULE_COUNT: usize = 125;
+
+    #[test]
+    fn rule_count_is_stable() {
+        assert_eq!(
+            RULES.len(),
+            EXPECTED_RULE_COUNT,
+            "RULES count is {} but EXPECTED_RULE_COUNT is {}. If this change is intentional, \
+             bump EXPECTED_RULE_COUNT and update the '// All N detection rules' comment and the \
+             README counts to match.",
+            RULES.len(),
+            EXPECTED_RULE_COUNT
+        );
+    }
+
+    #[test]
+    fn every_rule_regex_compiles() {
+        // COMPILED uses filter_map and silently drops any rule whose regex fails to build,
+        // so a bad pattern would quietly disable a rule. Fail loudly here instead.
+        let bad: Vec<String> = RULES
+            .iter()
+            .filter_map(|(name, _, _, pattern)| {
+                Regex::new(pattern).err().map(|e| format!("{name}: {e}"))
+            })
+            .collect();
+        assert!(bad.is_empty(), "rule regex failed to compile:\n{}", bad.join("\n"));
+        assert_eq!(
+            COMPILED.len(),
+            RULES.len(),
+            "{} rule(s) were dropped during regex compilation",
+            RULES.len() - COMPILED.len()
+        );
+    }
+
+    #[test]
+    fn rule_names_are_unique() {
+        let mut seen = std::collections::HashSet::new();
+        for (name, _, _, _) in RULES {
+            assert!(seen.insert(*name), "duplicate rule name: {name}");
+        }
+    }
+}
