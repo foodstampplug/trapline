@@ -57,7 +57,7 @@ fn sev_weight(s: &Severity) -> u8 {
     }
 }
 
-// All 94 detection rules, ported from flags.go
+// All 125 detection rules, ported from flags.go (+14 subdomain-takeover fingerprints)
 // Rust regex crate does not support look-around or backreferences (same as Go RE2)
 pub static RULES: &[(&str, Category, Severity, &str)] = &[
     // ── Secrets & keys ─────────────────────────────────────────────────────────
@@ -291,6 +291,38 @@ pub static RULES: &[(&str, Category, Severity, &str)] = &[
         r"\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\b"),
     ("US SSN", Category::Id, Severity::Medium,
         r"\b\d{3}-\d{2}-\d{4}\b"),
+
+    // ── Subdomain takeover fingerprints ──────────────────────────────────────────
+    // A hit flags a takeover CANDIDATE (provider "unclaimed resource" body on an
+    // in-scope host). Confirm the CNAME is dangling before reporting. RE2-safe.
+    ("Takeover: AWS S3", Category::Recon, Severity::High,
+        r"(?i)NoSuchBucket|The specified bucket does not exist"),
+    ("Takeover: GitHub Pages", Category::Recon, Severity::High,
+        r"There isn't a GitHub Pages site here"),
+    ("Takeover: Fastly", Category::Recon, Severity::High,
+        r"Fastly error: unknown domain"),
+    ("Takeover: Heroku", Category::Recon, Severity::High,
+        r"herokucdn\.com/error-pages/no-such-app\.html|No such app"),
+    ("Takeover: Shopify", Category::Recon, Severity::High,
+        r"Sorry, this shop is currently unavailable"),
+    ("Takeover: Ghost", Category::Recon, Severity::High,
+        r"The thing you were looking for is no longer here"),
+    ("Takeover: Pantheon", Category::Recon, Severity::High,
+        r"The gods are wise, but do not know of the site which you seek"),
+    ("Takeover: Tumblr", Category::Recon, Severity::High,
+        r"Whatever you were looking for doesn't currently exist at this address"),
+    ("Takeover: WordPress.com", Category::Recon, Severity::High,
+        r"Do you want to register .*\.wordpress\.com"),
+    ("Takeover: Zendesk", Category::Recon, Severity::High,
+        r"Help Center Closed"),
+    ("Takeover: Readme.io", Category::Recon, Severity::High,
+        r"Project doesnt exist\.\.\. yet!"),
+    ("Takeover: Azure", Category::Recon, Severity::Medium,
+        r"404 Web Site not found"),
+    ("Takeover: Surge.sh", Category::Recon, Severity::Medium,
+        r"(?i)project not found"),
+    ("Takeover: Bitbucket", Category::Recon, Severity::Medium,
+        r"Repository not found"),
 ];
 
 /// Compiled regex cache — built once at first use
@@ -420,5 +452,54 @@ fn truncate_str(s: &str, n: usize) -> String {
         t
     } else {
         s.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Guard against silent rule drift. When you intentionally add or remove a rule,
+    /// update this number AND the header comment in this file + the README counts.
+    const EXPECTED_RULE_COUNT: usize = 125;
+
+    #[test]
+    fn rule_count_is_stable() {
+        assert_eq!(
+            RULES.len(),
+            EXPECTED_RULE_COUNT,
+            "RULES count is {} but EXPECTED_RULE_COUNT is {}. If this change is intentional, \
+             bump EXPECTED_RULE_COUNT and update the '// All N detection rules' comment and the \
+             README counts to match.",
+            RULES.len(),
+            EXPECTED_RULE_COUNT
+        );
+    }
+
+    #[test]
+    fn every_rule_regex_compiles() {
+        // COMPILED uses filter_map and silently drops any rule whose regex fails to build,
+        // so a bad pattern would quietly disable a rule. Fail loudly here instead.
+        let bad: Vec<String> = RULES
+            .iter()
+            .filter_map(|(name, _, _, pattern)| {
+                Regex::new(pattern).err().map(|e| format!("{name}: {e}"))
+            })
+            .collect();
+        assert!(bad.is_empty(), "rule regex failed to compile:\n{}", bad.join("\n"));
+        assert_eq!(
+            COMPILED.len(),
+            RULES.len(),
+            "{} rule(s) were dropped during regex compilation",
+            RULES.len() - COMPILED.len()
+        );
+    }
+
+    #[test]
+    fn rule_names_are_unique() {
+        let mut seen = std::collections::HashSet::new();
+        for (name, _, _, _) in RULES {
+            assert!(seen.insert(*name), "duplicate rule name: {name}");
+        }
     }
 }
