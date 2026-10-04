@@ -62,6 +62,13 @@ export const TEMPLATES: TemplateCategory[] = [
     { name: "CORS + credentials chain", desc: "reflect + allow-credentials: true = credentialed steal", tool: "curl", cmd: "curl.exe -s -D - -o NUL -H \"Origin: https://evil.com\" {{url}} | Select-String 'access-control-allow-origin|access-control-allow-credentials'" },
   ]},
 
+  // ── OPEN REDIRECT ─────────────────────────────────────────────────────────────
+  { cat: "Open redirect", items: [
+    { name: "param sweep (//evil.com)", desc: "test common redirect params, flag reflected Location — chains into OAuth/SSRF", tool: "curl", cmd: "@('next','url','redirect','redirect_uri','redirect_url','return','returnTo','return_to','returnUrl','dest','destination','continue','r','u','goto','target','rurl','redir','forward','callback','to') | ForEach-Object { $loc = curl.exe -s -D - -o NUL \"{{url}}?$_=//evil.com\" | Select-String -Pattern '^location:\\s*(?:https?:)?//evil\\.com'; if ($loc) { \"OPEN REDIRECT via param: $_  ->  $loc\" } }" },
+    { name: "filter-bypass payloads (one param)", desc: "scheme-relative, backslash, @-trick, dot-escape — set {{param}}", tool: "curl", cmd: "@('//evil.com','https://evil.com','/\\evil.com','https:/evil.com','//evil.com/%2f..','https://{{domain}}.evil.com','https://{{domain}}@evil.com','/%2f/evil.com','////evil.com') | ForEach-Object { $loc = curl.exe -s -D - -o NUL \"{{url}}?{{param}}=$_\" | Select-String '^location:'; \"$_  ->  $loc\" }" },
+    { name: "path-based redirect", desc: "apps that redirect on /redirect/<url> or /out?url=", tool: "curl", cmd: "@('/redirect/https://evil.com','/redirect?url=https://evil.com','/out?url=https://evil.com','/away?to=https://evil.com','/exit?url=https://evil.com') | ForEach-Object { $loc = curl.exe -s -D - -o NUL \"{{url}}$_\" | Select-String '^location:'; \"$_  ->  $loc\" }" },
+  ]},
+
   // ── CONFIG & SECRET LEAK ──────────────────────────────────────────────────────
   { cat: "Config & secret leak", items: [
     { name: "config sweep (full)", desc: "all common pre-auth config paths (Skill 12)", tool: "curl", cmd: "@('/.env','/.env.local','/.env.development','/.env.production','/config.json','/app-config.json','/runtime-config.json','/env.json','/env.js','/assets/env.js','/static/env.js','/js/env.js','/js/config.js','/settings.json','/web.config','/appsettings.json','/application.yml','/application.properties','/conf/app.json') | ForEach-Object { $c = curl.exe -s -o NUL -w \"%{http_code}\" \"{{url}}$_\"; if ($c -ne '404') { \"$c  $_\" } }" },
@@ -307,12 +314,26 @@ export const TEMPLATES: TemplateCategory[] = [
     { name: "nuclei takeover", desc: "subdomain takeover signatures", tool: "nuclei", cmd: "nuclei -u {{url}} -tags takeover -silent" },
     { name: "CNAME to Heroku/Fastly/S3", desc: "check for CNAME pointing to unclaimed third-party service", cmd: "Resolve-DnsName {{domain}} -Type CNAME | Where-Object { $_.NameHost -match 'heroku|github\\.io|fastly|amazonaws|azurewebsites|shopify|netlify|ghost\\.io|readme\\.io' }" },
     { name: "staging signup check", desc: "staging often re-enables signup — try registering (Skill 18)", tool: "curl", cmd: "curl.exe -s -X POST {{url}}/register -H \"Content-Type: application/json\" -d '{\"email\":\"trapline-test@mailinator.com\",\"password\":\"TestPass123!\",\"name\":\"Test User\"}'" },
+    { name: "SPF record", desc: "missing SPF → email spoofing; reports NO SPF if absent", cmd: "$spf = Resolve-DnsName -Type TXT {{domain}} -ErrorAction SilentlyContinue | Where-Object { $_.Strings -match 'v=spf1' }; if ($spf) { $spf.Strings } else { 'NO SPF RECORD' }" },
+    { name: "DMARC policy", desc: "missing or p=none → weak/no enforcement", cmd: "$d = Resolve-DnsName -Type TXT _dmarc.{{domain}} -ErrorAction SilentlyContinue | Where-Object { $_.Strings -match 'v=DMARC1' }; if ($d) { $d.Strings; if ($d.Strings -match 'p=none') { 'WEAK: p=none (monitor only, no enforcement)' } } else { 'NO DMARC RECORD' }" },
+    { name: "DKIM selector probe", desc: "find a published DKIM selector (common names)", cmd: "@('default','google','selector1','selector2','k1','dkim','mail','smtp','s1','mandrill') | ForEach-Object { $r = Resolve-DnsName -Type TXT \"$_._domainkey.{{domain}}\" -ErrorAction SilentlyContinue; if ($r) { \"DKIM selector FOUND: $_\" } }" },
   ]},
 
   // ── PORTS ─────────────────────────────────────────────────────────────────────
   { cat: "Ports", items: [
     { name: "naabu top-1000", desc: "fast port scan, top 1000", tool: "naabu", cmd: "naabu -host {{domain}} -top-ports 1000 -silent" },
     { name: "naabu common admin ports", desc: "8001 Kong, 8080 alt-http, 9200 Elastic, 6443 K8s, 3000 Grafana", tool: "naabu", cmd: "naabu -host {{domain}} -p 8001,8080,8443,8888,9000,9001,9200,9300,6443,3000,3001,5601,4848,7474,5000,5432,27017 -silent" },
+  ]},
+
+  // ── TLS / SSL ─────────────────────────────────────────────────────────────────
+  { cat: "TLS / SSL", items: [
+    { name: "cert summary (native)", desc: "no tools needed — subject/issuer/expiry/protocol via .NET SslStream", cmd: "$h='{{domain}}';$cb=[Net.Security.RemoteCertificateValidationCallback]{$true};$t=New-Object Net.Sockets.TcpClient($h,443);$s=New-Object Net.Security.SslStream($t.GetStream(),$false,$cb);$s.AuthenticateAsClient($h);$c=[Security.Cryptography.X509Certificates.X509Certificate2]$s.RemoteCertificate;\"Subject : $($c.Subject)\";\"Issuer  : $($c.Issuer)\";\"Expires : $($c.NotAfter)\";\"DaysLeft: $(($c.NotAfter - (Get-Date)).Days)\";\"Protocol: $($s.SslProtocol)\";$s.Close();$t.Close()" },
+    { name: "cert dates + issuer (openssl)", desc: "quick expiry + issuer check", tool: "openssl", cmd: "\"Q\" | openssl s_client -connect {{domain}}:443 -servername {{domain}} 2>$null | openssl x509 -noout -subject -issuer -dates" },
+    { name: "hostname mismatch", desc: "cert CN/SAN doesn't cover the host (verify error 62)", tool: "openssl", cmd: "\"Q\" | openssl s_client -connect {{domain}}:443 -servername {{domain}} -verify_return_error 2>&1 | Select-String 'verify error|Verification|subject=|CN ='" },
+    { name: "weak protocol: TLS 1.0", desc: "handshake success = deprecated TLS 1.0 still enabled", tool: "openssl", cmd: "\"Q\" | openssl s_client -connect {{domain}}:443 -tls1 2>&1 | Select-String 'Protocol|Cipher|handshake failure|no peer certificate'" },
+    { name: "weak protocol: TLS 1.1", desc: "handshake success = deprecated TLS 1.1 still enabled", tool: "openssl", cmd: "\"Q\" | openssl s_client -connect {{domain}}:443 -tls1_1 2>&1 | Select-String 'Protocol|Cipher|handshake failure|no peer certificate'" },
+    { name: "cipher enum (nmap)", desc: "full cipher + grade report per protocol", tool: "nmap", cmd: "nmap --script ssl-enum-ciphers -p 443 {{domain}}" },
+    { name: "sslscan", desc: "one-shot cipher/protocol/cert audit", tool: "sslscan", cmd: "sslscan {{domain}}" },
   ]},
 
   // ── NUCLEI ────────────────────────────────────────────────────────────────────
